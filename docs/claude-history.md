@@ -117,3 +117,147 @@
 - After successful import: Begin Phase 2 (FastAPI backend)
 
 ---
+## 2025-12-15 (Phase 1 Complete - CSV Import Success)
+**Prompt:** User completed Supabase setup, ran migration, configured .env, and successfully imported CSV data.
+
+**Actions taken:**
+1. User created Supabase project and ran 001_initial_schema.sql migration
+2. Configured .env file with API credentials (Supabase, OpenAI, Google AI)
+3. Installed Python dependencies (openai, google-generativeai, supabase, python-dotenv)
+4. Successfully ran CSV import script
+5. Imported 40 Q&As with dual embeddings (OpenAI + Gemini)
+
+**Results:**
+- ✅ 40 Q&As imported successfully
+- ✅ 1 row skipped (pending answer)
+- ✅ All embeddings generated (OpenAI 1536-dim + Gemini 768-dim)
+- ✅ Database verified with sample records
+
+**Files touched:**
+- Created: .gitignore (to protect .env and secrets)
+- Created: .env (configured with actual API keys)
+- Created: scripts/test_env.py (helper to debug .env loading)
+
+**Next steps:**
+- Begin Phase 2: Build FastAPI backend with search + generation endpoints
+
+---
+## 2025-12-15 (Phase 2 Start - FastAPI Backend Foundation)
+**Prompt:** Begin Phase 2 - Build FastAPI backend with search and answer generation
+
+**Actions taken:**
+1. Created implementation plan for Phase 2 (10 steps)
+2. Built core configuration system (backend/app/core/config.py)
+   - Environment variable loading with Pydantic
+   - API key validation
+   - Model specifications and cost constants
+3. Built database client (backend/app/core/database.py)
+   - Supabase connection wrapper
+   - Dependency injection pattern for FastAPI
+4. Created comprehensive Pydantic models (backend/app/models/schemas.py)
+   - Search, Answer, Query request/response models
+   - Feedback and Metrics models
+5. Implemented LLM adapter pattern (backend/app/services/llm_adapters.py)
+   - BaseLLMAdapter abstract class
+   - OpenAI adapter (gpt-4o + text-embedding-3-small)
+   - Gemini adapter (Gemini 2.0 Flash + text-embedding-004)
+   - Factory function for runtime model switching
+
+**Files created:**
+- backend/app/__init__.py
+- backend/app/core/__init__.py
+- backend/app/core/config.py
+- backend/app/core/database.py
+- backend/app/models/__init__.py
+- backend/app/models/schemas.py
+- backend/app/services/__init__.py
+- backend/app/services/llm_adapters.py
+
+**Progress:** 3/10 implementation steps complete
+
+**Next steps:**
+- Build search service with hybrid search (vector + fulltext)
+- Implement web search integration (Tavily)
+- Create answer generation service
+- Build metrics logging service
+- Implement API endpoints
+- Create FastAPI main application
+- Add requirements.txt and test
+
+---
+## 2025-12-15 (Phase 2 Complete - Full FastAPI Backend)
+**Prompt:** Continue Phase 2 implementation - complete all remaining backend services
+
+**Actions taken:**
+1. Built search service (backend/app/services/search.py)
+   - Intent classification (internal vs external)
+   - Recency detection
+   - Vector search with cosine similarity
+   - Full-text search using Postgres tsvector
+   - Hybrid search combining both with weighted scores (0.7 vector + 0.3 fulltext)
+
+2. Implemented web search integration (backend/app/services/web_search.py)
+   - Tavily API integration for external searches
+   - Smart fallback logic (triggers when internal score < 0.7)
+   - Source attribution from web results
+
+3. Created answer generation service (backend/app/services/generation.py)
+   - Grounded answer generation from internal sources
+   - Web-based answer generation
+   - Hybrid answers combining internal + web sources
+   - Strong system prompts preventing hallucination
+   - Source citation requirements
+
+4. Built metrics logging service (backend/app/services/metrics.py)
+   - Query logging to query_logs table
+   - Staff feedback tracking (ratings, edits, notes)
+   - Model comparison metrics
+   - Recent query history retrieval
+
+5. Implemented all API endpoints (backend/app/api/endpoints.py)
+   - GET /health - Health check with API key validation
+   - POST /api/search - Search-only endpoint
+   - POST /api/answer - Generate answer from provided sources
+   - POST /api/query - Main endpoint (search + generation)
+   - POST /api/feedback - Staff feedback submission
+   - GET /api/metrics - Model comparison stats
+   - GET /api/recent-queries - Query history
+
+6. Created FastAPI main application (backend/app/main.py)
+   - CORS middleware configuration
+   - Startup/shutdown event handlers
+   - Router inclusion
+   - Root endpoint
+
+7. Added backend dependencies (backend/requirements.txt)
+   - FastAPI, Uvicorn, Pydantic
+   - OpenAI, Google Generative AI
+   - Supabase, httpx, numpy
+
+**Files created:**
+- backend/app/services/search.py
+- backend/app/services/web_search.py
+- backend/app/services/generation.py
+- backend/app/services/metrics.py
+- backend/app/api/__init__.py
+- backend/app/api/endpoints.py
+- backend/app/main.py
+- backend/requirements.txt
+
+**Progress:** 10/10 implementation steps complete ✅
+
+**Architecture highlights:**
+- Hybrid search (vector + fulltext) for best accuracy
+- Dual model support (OpenAI gpt-4o vs Gemini 2.0 Flash)
+- Adapter pattern for easy model switching
+- Comprehensive metrics tracking for model comparison
+- Web search integration for external questions
+- Grounded generation preventing hallucinations
+
+**Next steps:**
+- Install backend dependencies
+- Test the API endpoints
+- Fix any bugs or issues
+- Begin Phase 3 (Screenshot extraction) or Phase 4 (Frontend)
+
+---
