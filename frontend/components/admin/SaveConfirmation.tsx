@@ -11,9 +11,22 @@ import type { SaveContentResponse } from "@/lib/api/types"
 interface Props {
   saveResult: SaveContentResponse
   onStartOver: () => void
+  batchResults?: SaveContentResponse[]
 }
 
-export default function SaveConfirmation({ saveResult, onStartOver }: Props) {
+export default function SaveConfirmation({ saveResult, onStartOver, batchResults }: Props) {
+  const isBatchMode = batchResults && batchResults.length > 0
+
+  // Calculate batch totals
+  const totalQAPairs = isBatchMode
+    ? batchResults.reduce((sum, r) => sum + r.total_saved, 0)
+    : saveResult.total_saved
+
+  const totalEmbeddings = isBatchMode
+    ? batchResults.reduce((sum, r) => sum + r.child_ids.length * 2, 0)
+    : saveResult.child_ids.length * 2
+
+  const totalScreenshots = isBatchMode ? batchResults.length : 1
   return (
     <div className="space-y-8 text-center">
       {/* Success Icon */}
@@ -39,8 +52,9 @@ export default function SaveConfirmation({ saveResult, onStartOver }: Props) {
       <div>
         <h2 className="text-3xl font-bold text-gray-900 mb-2">Successfully Saved!</h2>
         <p className="text-gray-600 text-lg">
-          {saveResult.total_saved} Q&A pair{saveResult.total_saved !== 1 ? "s" : ""} added to
+          {totalQAPairs} Q&A pair{totalQAPairs !== 1 ? "s" : ""} added to
           the knowledge base
+          {isBatchMode && ` from ${totalScreenshots} screenshot${totalScreenshots !== 1 ? "s" : ""}`}
         </p>
       </div>
 
@@ -48,20 +62,45 @@ export default function SaveConfirmation({ saveResult, onStartOver }: Props) {
       <div className="bg-green-50 border border-green-200 rounded-lg p-6 text-left">
         <h3 className="font-semibold text-green-900 mb-3">Import Details</h3>
         <div className="space-y-2 text-sm">
-          <div className="flex justify-between">
-            <span className="text-green-700">Parent Entry ID:</span>
-            <span className="text-green-900 font-mono">{saveResult.parent_id}</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-green-700">Q&A Pairs Saved:</span>
-            <span className="text-green-900 font-medium">{saveResult.total_saved}</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-green-700">Child Entry IDs:</span>
-            <span className="text-green-900 font-medium">
-              {saveResult.child_ids.length} created
-            </span>
-          </div>
+          {isBatchMode ? (
+            <>
+              <div className="flex justify-between">
+                <span className="text-green-700">Screenshots Saved:</span>
+                <span className="text-green-900 font-medium">{totalScreenshots}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-green-700">Total Q&A Pairs:</span>
+                <span className="text-green-900 font-medium">{totalQAPairs}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-green-700">Parent Entry IDs:</span>
+                <span className="text-green-900 font-medium">{batchResults.length} created</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-green-700">Child Entry IDs:</span>
+                <span className="text-green-900 font-medium">
+                  {batchResults.reduce((sum, r) => sum + r.child_ids.length, 0)} created
+                </span>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="flex justify-between">
+                <span className="text-green-700">Parent Entry ID:</span>
+                <span className="text-green-900 font-mono">{saveResult.parent_id}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-green-700">Q&A Pairs Saved:</span>
+                <span className="text-green-900 font-medium">{saveResult.total_saved}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-green-700">Child Entry IDs:</span>
+                <span className="text-green-900 font-medium">
+                  {saveResult.child_ids.length} created
+                </span>
+              </div>
+            </>
+          )}
         </div>
       </div>
 
@@ -120,7 +159,7 @@ export default function SaveConfirmation({ saveResult, onStartOver }: Props) {
           onClick={onStartOver}
           className="flex-1 py-3 px-6 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-semibold transition-colors"
         >
-          Import Another Screenshot
+          {isBatchMode ? "Import More Screenshots" : "Import Another Screenshot"}
         </button>
         <Link
           href="/"
@@ -133,18 +172,16 @@ export default function SaveConfirmation({ saveResult, onStartOver }: Props) {
       {/* Stats */}
       <div className="grid grid-cols-3 gap-4 pt-6 border-t border-gray-200">
         <div>
-          <div className="text-2xl font-bold text-gray-900">{saveResult.total_saved}</div>
+          <div className="text-2xl font-bold text-gray-900">{totalQAPairs}</div>
           <div className="text-sm text-gray-600">Q&A Pairs</div>
         </div>
         <div>
-          <div className="text-2xl font-bold text-gray-900">
-            {saveResult.child_ids.length * 2}
-          </div>
+          <div className="text-2xl font-bold text-gray-900">{totalEmbeddings}</div>
           <div className="text-sm text-gray-600">Embeddings Generated</div>
         </div>
         <div>
-          <div className="text-2xl font-bold text-gray-900">1</div>
-          <div className="text-sm text-gray-600">Screenshot Saved</div>
+          <div className="text-2xl font-bold text-gray-900">{totalScreenshots}</div>
+          <div className="text-sm text-gray-600">Screenshot{totalScreenshots !== 1 ? "s" : ""} Saved</div>
         </div>
       </div>
     </div>

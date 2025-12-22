@@ -10,16 +10,30 @@ import Link from "next/link"
 import ScreenshotUploader from "@/components/admin/ScreenshotUploader"
 import ExtractionPreview from "@/components/admin/ExtractionPreview"
 import SaveConfirmation from "@/components/admin/SaveConfirmation"
-import type { ExtractScreenshotResponse, SaveContentResponse } from "@/lib/api/types"
+import BatchScreenshotUploader from "@/components/admin/BatchScreenshotUploader"
+import BatchExtractionPreview from "@/components/admin/BatchExtractionPreview"
+import { saveContent } from "@/lib/api/admin"
+import type {
+  ExtractScreenshotResponse,
+  SaveContentResponse,
+  BatchUpload
+} from "@/lib/api/types"
 
 type Step = "upload" | "preview" | "saved"
 
 export default function AdminImportPage() {
   const [currentStep, setCurrentStep] = useState<Step>("upload")
+  const [mode, setMode] = useState<"single" | "batch">("single")
+
+  // Single mode state
   const [extractionResult, setExtractionResult] = useState<ExtractScreenshotResponse | null>(null)
   const [saveResult, setSaveResult] = useState<SaveContentResponse | null>(null)
   const [sourceUrl, setSourceUrl] = useState<string>("")
   const [uploadedImage, setUploadedImage] = useState<string | null>(null)
+
+  // Batch mode state
+  const [batchUploads, setBatchUploads] = useState<BatchUpload[]>([])
+  const [batchSaveResults, setBatchSaveResults] = useState<SaveContentResponse[]>([])
 
   const handleExtractionComplete = (
     result: ExtractScreenshotResponse,
@@ -32,17 +46,51 @@ export default function AdminImportPage() {
     setCurrentStep("preview")
   }
 
+  const handleBatchExtractionComplete = (uploads: BatchUpload[]) => {
+    setBatchUploads(uploads)
+    setCurrentStep("preview")
+  }
+
   const handleSaveComplete = (result: SaveContentResponse) => {
     setSaveResult(result)
     setCurrentStep("saved")
   }
 
+  const handleBatchSave = async (uploads: BatchUpload[]) => {
+    const results: SaveContentResponse[] = []
+
+    for (const upload of uploads) {
+      if (upload.status === 'success' && upload.extractionResult) {
+        try {
+          const result = await saveContent({
+            qa_pairs: upload.extractionResult.qa_pairs,
+            media_url: upload.preview,
+            source_url: upload.sourceUrl,
+            extracted_by: upload.extractionResult.metadata.model_used,
+            confidence: upload.extractionResult.confidence,
+            raw_extraction: upload.extractionResult.metadata,
+            content_type: "screenshot"
+          })
+          results.push(result)
+        } catch (error) {
+          console.error(`Failed to save ${upload.sourceUrl}:`, error)
+        }
+      }
+    }
+
+    setBatchSaveResults(results)
+    setCurrentStep("saved")
+  }
+
   const handleStartOver = () => {
     setCurrentStep("upload")
+    setMode("single")
     setExtractionResult(null)
     setSaveResult(null)
     setSourceUrl("")
     setUploadedImage(null)
+    setBatchUploads([])
+    setBatchSaveResults([])
   }
 
   return (
@@ -50,15 +98,43 @@ export default function AdminImportPage() {
       <div className="max-w-6xl mx-auto">
         {/* Header */}
         <div className="mb-8">
-          <Link
-            href="/"
-            className="text-purple-600 hover:text-purple-700 font-medium mb-4 inline-block"
-          >
-            ← Back to Search
-          </Link>
+          <div className="flex items-center justify-between mb-4">
+            <Link
+              href="/"
+              className="text-purple-600 hover:text-purple-700 font-medium inline-block"
+            >
+              ← Back to Search
+            </Link>
+            {currentStep === "upload" && (
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setMode("single")}
+                  className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                    mode === "single"
+                      ? "bg-purple-600 text-white"
+                      : "bg-gray-200 text-gray-700 hover:bg-gray-300"
+                  }`}
+                >
+                  Single Upload
+                </button>
+                <button
+                  onClick={() => setMode("batch")}
+                  className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                    mode === "batch"
+                      ? "bg-purple-600 text-white"
+                      : "bg-gray-200 text-gray-700 hover:bg-gray-300"
+                  }`}
+                >
+                  Batch Upload
+                </button>
+              </div>
+            )}
+          </div>
           <h1 className="text-3xl font-bold text-gray-900">Import Content</h1>
           <p className="text-gray-600 mt-2">
-            Upload Facebook screenshots to extract Q&A pairs automatically
+            {mode === "batch"
+              ? "Upload multiple Facebook screenshots at once for bulk extraction"
+              : "Upload Facebook screenshots to extract Q&A pairs automatically"}
           </p>
         </div>
 
@@ -151,11 +227,15 @@ export default function AdminImportPage() {
 
         {/* Step Content */}
         <div className="bg-white rounded-lg shadow-sm p-8">
-          {currentStep === "upload" && (
+          {currentStep === "upload" && mode === "single" && (
             <ScreenshotUploader onExtractionComplete={handleExtractionComplete} />
           )}
 
-          {currentStep === "preview" && extractionResult && (
+          {currentStep === "upload" && mode === "batch" && (
+            <BatchScreenshotUploader onExtractionComplete={handleBatchExtractionComplete} />
+          )}
+
+          {currentStep === "preview" && mode === "single" && extractionResult && (
             <ExtractionPreview
               extractionResult={extractionResult}
               sourceUrl={sourceUrl}
@@ -165,8 +245,24 @@ export default function AdminImportPage() {
             />
           )}
 
-          {currentStep === "saved" && saveResult && (
+          {currentStep === "preview" && mode === "batch" && batchUploads.length > 0 && (
+            <BatchExtractionPreview
+              uploads={batchUploads}
+              onCancel={handleStartOver}
+              onSave={handleBatchSave}
+            />
+          )}
+
+          {currentStep === "saved" && mode === "single" && saveResult && (
             <SaveConfirmation saveResult={saveResult} onStartOver={handleStartOver} />
+          )}
+
+          {currentStep === "saved" && mode === "batch" && batchSaveResults.length > 0 && (
+            <SaveConfirmation
+              saveResult={batchSaveResults[0]}
+              batchResults={batchSaveResults}
+              onStartOver={handleStartOver}
+            />
           )}
         </div>
       </div>

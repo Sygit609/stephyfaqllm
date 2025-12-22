@@ -48,7 +48,7 @@ class Settings(BaseSettings):
     default_search_limit: int = 5
 
     # API Configuration
-    cors_origins: list = ["http://localhost:3000", "http://localhost:8000"]
+    cors_origins: list = ["http://localhost:3000", "http://localhost:3001", "http://localhost:8000"]
 
     class Config:
         env_file = ".env"

@@ -284,3 +284,37 @@ export interface ContentListResponse {
   page_size: number
   total_pages: number
 }
+
+// ============================================================================
+// Batch Upload Types
+// ============================================================================
+
+export interface BatchUpload {
+  id: string
+  file: File
+  preview: string  // Data URL
+  sourceUrl: string
+  status: 'pending' | 'extracting' | 'success' | 'failed'
+  extractionResult?: ExtractScreenshotResponse
+  error?: string
+  order: number
+}
+
+export interface BatchExtractionGroup {
+  uploadId: string
+  screenshotPreview: string
+  sourceUrl: string
+  qaPairs: QAPair[]
+  confidence: number
+  modelUsed: string
+  warnings: string[]
+  metadata: any
+}
+
+export interface BatchSaveResponse {
+  success: boolean
+  total_saved: number
+  screenshots_saved: number
+  parent_ids: string[]
+  child_ids: string[]
+}
