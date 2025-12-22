@@ -7,15 +7,16 @@ AI-powered Q&A search tool for Online Income Lab community. Helps staff answer r
 
 ---
 
-## 📊 Current Status (2025-12-15)
+## 📊 Current Status (2025-12-22)
 
 ### ✅ Completed Phases:
 - **Phase 1:** Database + CSV Import (40 Q&As loaded)
 - **Phase 2:** Backend API (FastAPI, fully tested)
+- **Phase 3:** Screenshot extraction with vision AI (ready for testing)
 - **Phase 4:** Frontend UI (Next.js, fully tested)
 
 ### ⏳ Future Phases:
-- **Phase 3:** Enhanced content ingestion (screenshots + SRT transcripts)
+- **Phase 3b:** SRT transcript parser (video content)
 - **Phase 5:** Deployment + Polish
 
 ---
@@ -149,39 +150,51 @@ oil-qa-tool/
 
 ---
 
-## 📋 Phase 3 Plans (Future Session)
+## 📋 Phase 3: Screenshot Extraction (2025-12-22)
 
-### Enhanced Content Ingestion UI:
+### ✅ Implemented Features:
 
-1. **Facebook Post Import:**
-   - Paste screenshot image
+1. **Facebook Screenshot Import:**
+   - Drag-and-drop or click to upload
+   - Image preview and validation
    - Enter Facebook post URL
-   - Extract Q&A with vision API
+   - Extract Q&A with Gemini Vision (free) + GPT-4 Vision fallback
+   - Confidence scores and warnings
+   - Preview & edit workflow
    - Auto-tag and categorize
 
-2. **Course Video Transcripts:**
-   - Upload .srt file with timecodes
-   - Parse and chunk by topic
-   - Preserve timestamps for references
-   - Link to video at specific time
+2. **Admin UI Workflow:**
+   - Step 1: Upload screenshot + URL
+   - Step 2: Review & edit extracted Q&As
+   - Step 3: Success confirmation with statistics
 
-3. **Rich Source Metadata:**
-   - Screenshot thumbnails
-   - Video timecodes
-   - Better source attribution
-   - Batch import functionality
+3. **Backend Features:**
+   - Dual embeddings (OpenAI + Gemini)
+   - Parent-child data model (screenshot → Q&As)
+   - Vision API fallback logic
+   - Quality validation and warnings
 
-### Database Schema Updates:
-- Add `content_type` field (facebook, video, manual)
-- Add `media_url` for screenshots/videos
-- Add `timecode_start` and `timecode_end`
-- Add `extracted_by` (manual, vision-api, etc.)
+### Database Schema Updates ✅
+- ✅ Added `content_type` field (screenshot, facebook, video, manual, csv)
+- ✅ Added `media_url` for screenshots/videos
+- ✅ Added `timecode_start` and `timecode_end` (for future video support)
+- ✅ Added `extracted_by` (gemini-vision, gpt4-vision, manual)
+- ✅ Added `extraction_confidence` (0.0-1.0)
+- ✅ Added `raw_content` (JSONB) for original API responses
+- ✅ Added `parent_id` for linking Q&As to parent screenshot
+
+### ⏳ Phase 3b: Future Enhancements
+- Course video transcript parser (.srt files)
+- Video timecode deep links
+- Batch screenshot upload
+- Content library management UI
 
 ---
 
 ## 📝 Important URLs
 
 - **Local Frontend:** http://localhost:3000
+- **Admin Import:** http://localhost:3000/admin/import
 - **Local Backend:** http://localhost:8001
 - **API Docs:** http://localhost:8001/docs
 - **Health Check:** http://localhost:8001/health
@@ -271,6 +284,6 @@ To resume where you left off:
 
 ---
 
-**Last Updated:** 2025-12-15
-**Status:** Phase 1, 2, 4 Complete ✅
-**Next:** Phase 3 Enhancement
+**Last Updated:** 2025-12-22
+**Status:** Phase 1, 2, 3, 4 Complete ✅
+**Next:** Phase 3 Testing & Phase 5 Deployment
