@@ -210,3 +210,77 @@ export interface ValidationError {
 export interface HTTPValidationError {
   detail: ValidationError[]
 }
+
+// ============================================================================
+// Admin - Content Ingestion Types
+// ============================================================================
+
+export interface QAPair {
+  question: string
+  answer: string
+  tags: string[]
+}
+
+export interface ExtractScreenshotRequest {
+  image_data: string  // Base64-encoded image
+  source_url: string
+  provider?: "gemini" | "openai"
+  use_fallback?: boolean
+}
+
+export interface ExtractScreenshotResponse {
+  qa_pairs: QAPair[]
+  confidence: number  // 0.0 to 1.0
+  model_used: string
+  used_fallback: boolean
+  warnings: string[]
+  metadata: {
+    model: string
+    tokens_input?: number
+    tokens_output?: number
+    latency_ms: number
+    cost_usd: number
+    source_url: string
+    raw_response?: string
+  }
+}
+
+export interface SaveContentRequest {
+  qa_pairs: QAPair[]
+  media_url: string
+  source_url: string
+  extracted_by: string  // gemini-vision or gpt4-vision
+  confidence: number
+  raw_extraction?: Record<string, any>
+  content_type?: string
+}
+
+export interface SaveContentResponse {
+  success: boolean
+  parent_id: string
+  child_ids: string[]
+  total_saved: number
+}
+
+export interface ContentItem {
+  id: string
+  content_type: string
+  question: string
+  answer: string
+  source_url: string | null
+  media_url: string | null
+  tags: string | null
+  extracted_by: string | null
+  extraction_confidence: number | null
+  parent_id: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface ContentListResponse {
+  items: ContentItem[]
+  total_count: number
+  page: number
+  page_size: number
+  total_pages: number
+}

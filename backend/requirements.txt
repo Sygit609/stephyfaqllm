@@ -21,3 +21,6 @@ httpx>=0.26,<0.28
 
 # Utilities
 numpy==1.26.4
+
+# Image Processing (for vision API)
+Pillow==11.0.0

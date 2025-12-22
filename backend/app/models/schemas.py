@@ -192,3 +192,102 @@ class HealthResponse(BaseModel):
     database_connected: bool
     api_keys_valid: Dict[str, bool]
     environment: str
+
+
+# ============================================================
+# Admin - Content Ingestion Models
+# ============================================================
+
+
+class ExtractScreenshotRequest(BaseModel):
+    """Request to extract Q&A from screenshot"""
+
+    image_data: str = Field(..., description="Base64-encoded image data")
+    source_url: str = Field(..., description="Facebook post URL or source")
+    provider: Optional[str] = Field(
+        "gemini", description="Preferred model: 'gemini' or 'openai'"
+    )
+    use_fallback: Optional[bool] = Field(
+        True, description="Use GPT-4 fallback if primary fails"
+    )
+
+
+class QAPair(BaseModel):
+    """Single Q&A pair with metadata"""
+
+    question: str
+    answer: str
+    tags: List[str] = []
+
+
+class ExtractScreenshotResponse(BaseModel):
+    """Response with extracted Q&A preview"""
+
+    qa_pairs: List[QAPair]
+    confidence: float = Field(..., ge=0.0, le=1.0, description="Extraction confidence")
+    model_used: str = Field(..., description="Model that performed extraction")
+    used_fallback: bool = Field(False, description="Whether fallback was used")
+    warnings: List[str] = []
+    metadata: Dict[str, Any] = Field(
+        ..., description="Extraction metadata: tokens, cost, latency"
+    )
+
+
+class SaveContentRequest(BaseModel):
+    """Request to save extracted (and possibly edited) content"""
+
+    qa_pairs: List[QAPair] = Field(..., description="Q&A pairs to save (user may have edited)")
+    media_url: str = Field(..., description="URL to uploaded screenshot")
+    source_url: str = Field(..., description="Facebook post URL")
+    extracted_by: str = Field(..., description="Model used: gemini-vision or gpt4-vision")
+    confidence: float = Field(..., ge=0.0, le=1.0)
+    raw_extraction: Optional[Dict[str, Any]] = Field(
+        None, description="Original extraction response"
+    )
+    content_type: Optional[str] = Field("screenshot", description="Content type")
+
+
+class SaveContentResponse(BaseModel):
+    """Response after saving content"""
+
+    success: bool
+    parent_id: str = Field(..., description="ID of parent screenshot entry")
+    child_ids: List[str] = Field(..., description="IDs of saved Q&A entries")
+    total_saved: int
+
+
+class ContentListFilter(BaseModel):
+    """Filters for content list"""
+
+    content_type: Optional[str] = None
+    extracted_by: Optional[str] = None
+    min_confidence: Optional[float] = None
+    has_parent: Optional[bool] = None
+    parent_id: Optional[str] = None
+
+
+class ContentItem(BaseModel):
+    """Single content item"""
+
+    id: str
+    content_type: str
+    question: str
+    answer: str
+    source_url: Optional[str] = None
+    media_url: Optional[str] = None
+    tags: Optional[str] = None
+    extracted_by: Optional[str] = None
+    extraction_confidence: Optional[float] = None
+    parent_id: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class ContentListResponse(BaseModel):
+    """Paginated content list response"""
+
+    items: List[ContentItem]
+    total_count: int
+    page: int
+    page_size: int
+    total_pages: int

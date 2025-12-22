@@ -11,11 +11,16 @@ from app.models.schemas import (
     FeedbackRequest, FeedbackResponse,
     MetricsResponse, ModelMetrics,
     RecentQueriesResponse, QueryLogEntry,
-    HealthResponse
+    HealthResponse,
+    ExtractScreenshotRequest, ExtractScreenshotResponse, QAPair,
+    SaveContentRequest, SaveContentResponse,
+    ContentListFilter, ContentListResponse, ContentItem
 )
 from app.services import search, web_search, generation, metrics
+from app.services import vision_extractor, content_manager
 from app.core.config import settings, validate_api_keys
 from app.core.database import get_db
+import base64
 
 router = APIRouter()
 
@@ -333,3 +338,195 @@ async def get_recent_query_history(limit: int = 100):
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Query history error: {str(e)}")
+
+
+# ============================================================
+# Admin Endpoints - Content Ingestion
+# ============================================================
+
+
+@router.post("/api/admin/extract-screenshot", response_model=ExtractScreenshotResponse)
+async def extract_screenshot_qa(request: ExtractScreenshotRequest):
+    """
+    Extract Q&A pairs from screenshot using vision API
+    Returns preview for user to review/edit before saving
+    """
+    try:
+        # Decode base64 image
+        try:
+            image_data = base64.b64decode(request.image_data)
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Invalid base64 image data: {str(e)}")
+
+        # Extract Q&A using vision API with fallback
+        result = await vision_extractor.extract_from_screenshot(
+            image_data=image_data,
+            source_url=request.source_url,
+            use_fallback=request.use_fallback,
+            confidence_threshold=0.7
+        )
+
+        # Convert to response format
+        qa_pairs = [
+            QAPair(
+                question=qa.get("question", ""),
+                answer=qa.get("answer", ""),
+                tags=qa.get("tags", [])
+            )
+            for qa in result.qa_pairs
+        ]
+
+        return ExtractScreenshotResponse(
+            qa_pairs=qa_pairs,
+            confidence=result.confidence,
+            model_used=result.model_used,
+            used_fallback=result.used_fallback,
+            warnings=result.warnings,
+            metadata=result.metadata
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Extraction error: {str(e)}")
+
+
+@router.post("/api/admin/save-content", response_model=SaveContentResponse)
+async def save_extracted_content(request: SaveContentRequest):
+    """
+    Save extracted (and possibly edited) Q&A content to knowledge base
+    Generates dual embeddings for each Q&A pair
+    """
+    try:
+        db = get_db()
+
+        # Convert QAPair models to dicts
+        qa_pairs_dict = [
+            {
+                "question": qa.question,
+                "answer": qa.answer,
+                "tags": qa.tags
+            }
+            for qa in request.qa_pairs
+        ]
+
+        # Save with parent-child structure
+        result = await content_manager.save_extracted_content(
+            db=db,
+            qa_pairs=qa_pairs_dict,
+            media_url=request.media_url,
+            source_url=request.source_url,
+            extracted_by=request.extracted_by,
+            overall_confidence=request.confidence,
+            raw_extraction=request.raw_extraction or {},
+            content_type=request.content_type or "screenshot"
+        )
+
+        return SaveContentResponse(
+            success=True,
+            parent_id=result["parent_id"],
+            child_ids=result["child_ids"],
+            total_saved=result["total_saved"]
+        )
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Save error: {str(e)}")
+
+
+@router.get("/api/admin/content-list", response_model=ContentListResponse)
+async def list_content_items(
+    content_type: str = None,
+    extracted_by: str = None,
+    min_confidence: float = None,
+    has_parent: bool = None,
+    parent_id: str = None,
+    page: int = 1,
+    page_size: int = 50
+):
+    """
+    List content items with filtering and pagination
+    Useful for content management and review
+    """
+    try:
+        db = get_db()
+
+        # Build filters
+        filters = {}
+        if content_type:
+            filters["content_type"] = content_type
+        if extracted_by:
+            filters["extracted_by"] = extracted_by
+        if min_confidence is not None:
+            filters["min_confidence"] = min_confidence
+        if has_parent is not None:
+            filters["has_parent"] = has_parent
+        if parent_id:
+            filters["parent_id"] = parent_id
+
+        # Get content list
+        result = content_manager.list_content(
+            db=db,
+            filters=filters,
+            page=page,
+            page_size=page_size
+        )
+
+        # Convert to ContentItem models
+        content_items = [
+            ContentItem(
+                id=str(item["id"]),
+                content_type=item["content_type"],
+                question=item["question"],
+                answer=item["answer"],
+                source_url=item.get("source_url"),
+                media_url=item.get("media_url"),
+                tags=item.get("tags"),
+                extracted_by=item.get("extracted_by"),
+                extraction_confidence=item.get("extraction_confidence"),
+                parent_id=str(item["parent_id"]) if item.get("parent_id") else None,
+                created_at=item["created_at"],
+                updated_at=item["updated_at"]
+            )
+            for item in result["items"]
+        ]
+
+        return ContentListResponse(
+            items=content_items,
+            total_count=result["total_count"],
+            page=result["page"],
+            page_size=result["page_size"],
+            total_pages=result["total_pages"]
+        )
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"List content error: {str(e)}")
+
+
+@router.delete("/api/admin/content/{item_id}")
+async def delete_content_item(item_id: str):
+    """
+    Delete a content item
+    If item is a parent, cascade delete children
+    """
+    try:
+        db = get_db()
+
+        result = content_manager.delete_content(
+            db=db,
+            item_id=item_id,
+            delete_children=True
+        )
+
+        if not result["success"]:
+            raise HTTPException(status_code=404, detail="Content item not found")
+
+        return {
+            "success": True,
+            "message": f"Deleted {result['deleted_count']} item(s)",
+            "deleted_count": result["deleted_count"]
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Delete error: {str(e)}")
