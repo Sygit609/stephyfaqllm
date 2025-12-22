@@ -394,3 +394,185 @@
 **Session paused - all work saved to GitHub**
 
 ---
+## 2025-12-22 (Phase 3 Implementation - Screenshot Extraction Backend & Frontend)
+**Prompt:** Build Phase 3 - Screenshot extraction feature with admin UI
+
+**Actions taken:**
+1. Created database migration (002_content_ingestion.sql) with:
+   - New columns in knowledge_items: content_type, media_url, media_thumbnail, timecode_start/end, extracted_by, extraction_confidence, raw_content, parent_id
+   - Parent-child relationship for organizing Q&As from single screenshot
+   - Indexes and helper views for analytics
+
+2. Extended LLM adapters with vision capabilities:
+   - Added extract_from_image() method to BaseLLMAdapter
+   - OpenAI implementation using gpt-4o vision ($0.01-0.03 per image)
+   - Gemini implementation using gemini-2.0-flash-exp vision (free)
+
+3. Built vision extraction service (vision_extractor.py):
+   - Tries Gemini first (free), falls back to GPT-4 if confidence < 0.7
+   - Validates extraction quality
+   - Returns warnings for low confidence
+   - Comparison mode for testing both models
+
+4. Created content manager service (content_manager.py):
+   - CRUD operations for knowledge items
+   - Parent-child structure for screenshots
+   - Dual embedding generation
+   - List/delete content with filters
+
+5. Added admin API endpoints:
+   - POST /api/admin/extract-screenshot (preview only)
+   - POST /api/admin/save-content (with embeddings)
+   - GET /api/admin/content-list (with pagination/filters)
+   - DELETE /api/admin/content/{item_id}
+
+6. Built frontend admin UI:
+   - 3-step workflow: Upload → Preview/Edit → Saved
+   - ScreenshotUploader component (drag-drop, file validation)
+   - ExtractionPreview component (edit Q&As before save)
+   - SaveConfirmation component (success stats)
+   - AdminImportPage orchestrating workflow
+
+**Files created/modified:**
+Backend:
+- supabase/migrations/002_content_ingestion.sql
+- backend/app/services/vision_extractor.py
+- backend/app/services/content_manager.py
+- Modified: backend/app/services/llm_adapters.py
+- Modified: backend/app/api/endpoints.py
+- Modified: backend/app/models/schemas.py
+- Modified: backend/requirements.txt (added Pillow)
+
+Frontend:
+- frontend/lib/api/admin.ts
+- frontend/app/admin/import/page.tsx
+- frontend/components/admin/ScreenshotUploader.tsx
+- frontend/components/admin/ExtractionPreview.tsx
+- frontend/components/admin/SaveConfirmation.tsx
+- Modified: frontend/lib/api/types.ts
+- Modified: frontend/app/page.tsx (added "+ Import Content" link)
+
+**Architecture decisions:**
+- Gemini Vision primary (free), GPT-4 fallback (paid)
+- Parent-child data model (1 screenshot → N Q&As)
+- 0.7 confidence threshold for fallback
+- Preview-before-save workflow for staff control
+
+**Cost per screenshot:** $0.02-0.05 (mostly embeddings, occasional GPT-4 fallback)
+
+**Documentation:**
+- Created: docs/PHASE3_IMPLEMENTATION.md (comprehensive implementation guide)
+
+**Status:**
+- ✅ Backend complete and tested
+- ✅ Frontend complete and tested
+- ✅ Database migration complete
+- ⏳ Testing with real screenshots pending
+
+**Git commits:**
+- ed3f09c: Add comprehensive session summary
+- a80f231: Add detailed Phase 3 implementation plan
+- a2b8756: Add comprehensive quick start guide
+- 20c4f51: Update project documentation with Phase 2-4 completion
+- 70f2d10: Add Phase 2 & 4: Complete backend API and frontend UI
+
+---
+## 2025-12-23 (Phase 3b Implementation - Batch Upload with Clipboard Paste)
+**Prompt:** Build batch screenshot upload feature with clipboard paste support for bulk Facebook post imports
+
+**Reasoning:** Initial Phase 3 only supported single screenshot uploads. User needs to import 10-50 screenshots at once during initial setup, with flexible workflow (paste all then add URLs, or add URLs as you paste).
+
+**Actions taken:**
+1. Created utility functions:
+   - clipboard.ts: Extract image files from paste events
+   - file-validation.ts: Shared validation logic (type, size limits)
+
+2. Built reusable components:
+   - ScreenshotThumbnail: Single screenshot card with status badges
+   - BatchProgressTracker: Real-time progress display (success/failed/remaining)
+
+3. Implemented BatchScreenshotUploader component:
+   - Global clipboard paste listener (Cmd+V / Ctrl+V)
+   - Drag-and-drop multiple files
+   - Thumbnail grid with URL inputs per screenshot
+   - Sequential extraction with 500ms delay (rate limit protection)
+   - Individual status tracking (pending/extracting/success/failed)
+   - Async preview generation to avoid hydration errors
+
+4. Created BatchExtractionPreview component:
+   - Accordion layout grouping Q&As by screenshot
+   - Expand/collapse all functionality
+   - Inline Q&A editing per screenshot
+   - Individual screenshot deletion
+   - Confidence badges per extraction
+   - Batch save with sequential API calls
+
+5. Enhanced existing components:
+   - AdminImportPage: Added Single/Batch mode toggle, separate state management
+   - SaveConfirmation: Added batch statistics support (total screenshots/Q&As/embeddings)
+   - types.ts: Added BatchUpload interface
+
+6. Fixed issues:
+   - Empty string in image src: Changed to async Promise-based preview generation
+   - CORS error: Added localhost:3001 to allowed origins in backend config
+   - Nested button HTML error: Restructured accordion header to avoid button-in-button
+
+**Key features:**
+- ✅ Paste screenshots from clipboard (Cmd+V / Ctrl+V)
+- ✅ Upload 10-50 screenshots at once
+- ✅ Sequential extraction with progress tracking
+- ✅ Failed extractions don't block others
+- ✅ Accordion UI for batch review
+- ✅ Error handling and recovery
+- ✅ No breaking changes to single-upload workflow
+
+**Files created:**
+- frontend/components/admin/BatchScreenshotUploader.tsx (345 lines)
+- frontend/components/admin/ScreenshotThumbnail.tsx (130 lines)
+- frontend/components/admin/BatchProgressTracker.tsx (68 lines)
+- frontend/components/admin/BatchExtractionPreview.tsx (348 lines)
+- frontend/lib/utils/clipboard.ts
+- frontend/lib/utils/file-validation.ts
+
+**Files modified:**
+- backend/app/core/config.py (added localhost:3001 to CORS)
+- frontend/app/admin/import/page.tsx (batch mode support)
+- frontend/components/admin/SaveConfirmation.tsx (batch statistics)
+- frontend/lib/api/types.ts (BatchUpload interface)
+
+**Technical implementation:**
+- Async preview generation with Promise.all
+- Sequential extraction with 500ms delays
+- Flexbox layout to avoid nested buttons
+- Conditional rendering for empty previews
+- Batch save with error recovery
+
+**Testing status:**
+- ✅ Component compilation successful
+- ✅ CORS fixed for localhost:3001
+- ✅ File upload UI renders correctly
+- ⏳ End-to-end batch workflow pending
+- ⏳ Clipboard paste on macOS/Windows pending
+
+**Documentation created:**
+- docs/SESSION_2025-12-23.md (comprehensive session summary)
+
+**Git commits:**
+- 57945d1: Add Phase 3b: Batch screenshot upload with clipboard paste support (10 files, +1205 lines)
+- 70e50c5: Add session summary for December 23, 2025
+
+**Status:**
+- ✅ Phase 3b implementation complete
+- ✅ All code committed and pushed to GitHub
+- ✅ Documentation updated
+- ⏳ Ready for testing with real screenshots
+
+**Next steps:**
+- Test complete batch upload workflow
+- Verify clipboard paste on macOS and Windows
+- Test with 10-20 screenshots to measure performance
+- Update PHASE3_IMPLEMENTATION.md with Phase 3b details
+
+**Session end:** December 23, 2025
+
+---
