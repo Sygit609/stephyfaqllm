@@ -64,9 +64,9 @@ export default function AdminImportPage() {
         try {
           const result = await saveContent({
             qa_pairs: upload.extractionResult.qa_pairs,
-            media_url: upload.preview,
+            media_url: upload.sourceUrl || 'screenshot-' + upload.id, // Use source URL as media reference
             source_url: upload.sourceUrl,
-            extracted_by: upload.extractionResult.metadata.model_used,
+            extracted_by: upload.extractionResult.metadata.model,
             confidence: upload.extractionResult.confidence,
             raw_extraction: upload.extractionResult.metadata,
             content_type: "screenshot"
