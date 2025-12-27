@@ -575,4 +575,132 @@ Frontend:
 
 **Session end:** December 23, 2025
 
+---## 2025-12-27 (Admin Content Management Page + Bug Fixes)
+**Prompt:** Build admin content management page to view, edit, and delete all knowledge base entries, plus fix screenshot import errors
+
+**Reasoning:** User needed a way to manage the growing knowledge base (now 40+ items) with filtering, pagination, and CRUD operations. During testing, discovered multiple database constraint issues preventing screenshot imports.
+
+**Actions taken:**
+
+1. **Admin Content Management Page (Full Implementation):**
+   - Built ContentTable component with responsive table/card layouts
+   - Added ContentFiltersBar for filtering by type, extracted_by, confidence, parent/child
+   - Created EditContentModal for inline editing with regenerate embeddings option
+   - Built DeleteConfirmModal with cascade warning for parent items
+   - Implemented server-side pagination (20 items per page)
+   - Added real-time stats summary (total items, pages, current count)
+   
+2. **Backend Integration:**
+   - Created UpdateContentRequest/Response schemas in models/schemas.py
+   - Added PUT `/api/admin/content/{item_id}` endpoint with embedding regeneration
+   - Implemented updateContent() API wrapper in frontend/lib/api/admin.ts
+   - Replaced mock data with real API calls in admin/content/page.tsx
+   - Server-side filtering and pagination via query parameters
+
+3. **Database Schema Migration (Fixed Multiple Constraint Errors):**
+   - **Issue 1**: Missing `date` column (NOT NULL constraint)
+     - Fixed: Added `date: datetime.utcnow().date().isoformat()` to parent and child entries
+   - **Issue 2**: Invalid `extracted_by` value ('gpt-4o-vision' not allowed)
+     - Fixed: Updated constraint to accept `['manual', 'gemini-vision', 'gpt4-vision', 'gpt-4o-vision']`
+   - **Issue 3**: Tags format mismatch (sending string, expecting PostgreSQL array)
+     - Fixed: Changed from comma-separated string to array (`tags if isinstance(tags, list) else []`)
+   
+4. **Tags Type Handling (Frontend Display):**
+   - **Issue**: Database stores tags as PostgreSQL TEXT[], frontend expected string
+   - **Fixed**: Added Pydantic validator in ContentItem schema
+     - Accepts `Union[str, List[str]]`
+     - Auto-converts list to comma-separated string for display
+     - Preserves arrays when writing to database
+
+5. **Backend Server Management:**
+   - Killed stale backend process on port 8000
+   - Ensured correct backend on port 8001 with latest code
+   - Restarted frontend to pick up environment variables
+
+**Files created:**
+- frontend/app/admin/content/page.tsx (303 lines)
+- frontend/components/admin/ContentTable.tsx (242 lines)
+- frontend/components/admin/ContentFiltersBar.tsx (~100 lines estimated)
+- frontend/components/admin/EditContentModal.tsx (~150 lines estimated)
+- frontend/components/admin/DeleteConfirmModal.tsx (~100 lines estimated)
+
+**Files modified:**
+- backend/app/models/schemas.py (added UpdateContentRequest/Response, fixed tags handling)
+- backend/app/api/endpoints.py (added PUT endpoint for updates)
+- backend/app/services/content_manager.py (fixed date field, tags array format)
+- frontend/lib/api/admin.ts (added updateContent function)
+- frontend/lib/api/types.ts (added UpdateContentRequest/Response interfaces)
+
+**Database fixes (User ran in Supabase SQL Editor):**
+```sql
+-- Step 1: Drop old constraint
+ALTER TABLE knowledge_items DROP CONSTRAINT knowledge_items_content_type_check;
+
+-- Step 2: Add missing columns from migration 002
+ALTER TABLE knowledge_items
+ADD COLUMN IF NOT EXISTS question TEXT,
+ADD COLUMN IF NOT EXISTS media_url TEXT,
+-- ... (other columns)
+
+-- Step 3: Update data and add new constraints
+UPDATE knowledge_items SET question = COALESCE(question_enriched, question_raw) WHERE question IS NULL;
+UPDATE knowledge_items SET content_type = 'manual' WHERE content_type = 'qa';
+
+-- Step 4: Update extracted_by constraint
+ALTER TABLE knowledge_items DROP CONSTRAINT IF EXISTS extracted_by_check;
+ALTER TABLE knowledge_items
+ADD CONSTRAINT extracted_by_check
+CHECK (extracted_by IS NULL OR extracted_by IN ('manual', 'gemini-vision', 'gpt4-vision', 'gpt-4o-vision'));
+```
+
+**Key features implemented:**
+- ✅ View all knowledge items with pagination (20/page)
+- ✅ Filter by content type, extraction method, confidence score, parent/child
+- ✅ Edit question, answer, tags, source_url with optional embedding regeneration
+- ✅ Delete items with cascade warning for parents
+- ✅ Color-coded confidence badges (green >70%, yellow 50-70%, red <50%)
+- ✅ Parent-child relationship indicators
+- ✅ Responsive design (table on desktop, cards on mobile)
+- ✅ Real-time stats and empty states
+
+**Screenshot Import Fixes:**
+- ✅ Date field now populated automatically
+- ✅ Tags stored as PostgreSQL arrays
+- ✅ GPT-4o vision model accepted in constraint
+- ✅ Parent-child structure working correctly
+- ✅ Dual embeddings generated for all Q&As
+
+**Architecture improvements:**
+- Server-side pagination for scalability
+- Type-safe Pydantic validators for data transformation
+- Graceful handling of PostgreSQL array vs string types
+- Proper CASCADE DELETE for parent-child relationships
+
+**Testing results:**
+- ✅ Admin content page loads 40 items successfully
+- ✅ Pagination works (2 pages at 20 items/page)
+- ✅ Filters work correctly (type, method, confidence)
+- ✅ Edit modal saves changes and refreshes table
+- ✅ Delete removes items from database
+- ✅ Screenshot import now works end-to-end
+- ✅ Tags display correctly as comma-separated strings
+
+**Git status:**
+- Latest commit: 9183702 "dec 27 changes update, fixed screenshot upload and content table pages"
+- All changes committed and saved
+- Working tree clean
+
+**Current status:**
+- ✅ Phase 3 complete (screenshot extraction working)
+- ✅ Admin content management page fully functional
+- ✅ All database constraints fixed
+- ✅ Screenshot imports working end-to-end
+- 🎯 Ready for production use
+
+**Both servers running:**
+- Backend: http://localhost:8001 (healthy)
+- Frontend: http://localhost:3002
+
+**Session end:** December 27, 2025
+
 ---
