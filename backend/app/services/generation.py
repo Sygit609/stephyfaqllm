@@ -7,6 +7,37 @@ from typing import List, Dict, Any, Tuple
 from app.services.llm_adapters import get_adapter
 
 
+def format_video_citation(source: Dict[str, Any]) -> str:
+    """
+    Format video segment citation with clickable timestamp and full URL
+    Args:
+        source: Video segment source
+    Returns:
+        Formatted citation string
+    """
+    video_url = source.get('media_url', '')
+    start_time = source.get('timecode_start', 0)
+    end_time = source.get('timecode_end', 0)
+
+    # Format timestamp as MM:SS
+    start_mm = start_time // 60
+    start_ss = start_time % 60
+    mm_ss = f"{start_mm:02d}:{start_ss:02d}"
+
+    # Create clickable URL with timestamp
+    clickable_url = f"{video_url}?t={start_time}" if video_url else ""
+
+    # Get lesson/module/course names if available (from question field)
+    segment_title = source.get('question', '')
+    transcript_text = source.get('answer', '')
+
+    return (
+        f"Watch at [{mm_ss}]({clickable_url})\n"
+        f"Full video: {video_url}\n\n"
+        f"Transcript: \"{transcript_text}\""
+    )
+
+
 def format_sources_for_prompt(sources: List[Dict[str, Any]]) -> str:
     """
     Format matched sources into context string for LLM
@@ -20,18 +51,42 @@ def format_sources_for_prompt(sources: List[Dict[str, Any]]) -> str:
 
     context_parts = []
     for idx, source in enumerate(sources, 1):
-        question = source.get("question", "")
-        answer = source.get("answer", "")
-        category = source.get("category", "")
-        tags = source.get("tags", [])
+        content_type = source.get("content_type", "")
 
-        context_parts.append(
-            f"[Source {idx}]\n"
-            f"Category: {category}\n"
-            f"Tags: {', '.join(tags) if tags else 'None'}\n"
-            f"Q: {question}\n"
-            f"A: {answer}\n"
-        )
+        # Check if this is a video segment (has timecode)
+        if source.get("timecode_start") is not None:
+            # Video segment - format differently
+            question = source.get("question", "")
+            answer = source.get("answer", "")
+            video_url = source.get("media_url", "")
+            start_time = source.get("timecode_start", 0)
+
+            # Format timestamp
+            mm = start_time // 60
+            ss = start_time % 60
+            mm_ss = f"{mm:02d}:{ss:02d}"
+
+            context_parts.append(
+                f"[Video Source {idx}]\n"
+                f"From: {question}\n"
+                f"Timestamp: {mm_ss}\n"
+                f"Video URL: {video_url}?t={start_time}\n"
+                f"Transcript: {answer}\n"
+            )
+        else:
+            # Regular Q&A source
+            question = source.get("question", "")
+            answer = source.get("answer", "")
+            category = source.get("category", "")
+            tags = source.get("tags", [])
+
+            context_parts.append(
+                f"[Source {idx}]\n"
+                f"Category: {category}\n"
+                f"Tags: {', '.join(tags) if tags else 'None'}\n"
+                f"Q: {question}\n"
+                f"A: {answer}\n"
+            )
 
     return "\n---\n".join(context_parts)
 
@@ -98,12 +153,15 @@ Your role is to help staff answer student questions by providing accurate, groun
 IMPORTANT RULES:
 1. ONLY use information from the provided sources - do NOT make up or infer information
 2. Cite which source(s) you're using (e.g., "According to Source 1...")
-3. If the sources don't fully answer the question, say so clearly
-4. Be helpful and conversational, but stay factual
-5. If multiple sources have similar information, synthesize them
-6. Maintain the friendly, supportive tone appropriate for student support
+3. When citing VIDEO sources, include the clickable timestamp link AND the full video URL for easy copy-paste to Facebook:
+   Example: "Watch at [01:45](video_url?t=105)"
+   Example: "Full video: video_url"
+4. If the sources don't fully answer the question, say so clearly
+5. Be helpful and conversational, but stay factual
+6. If multiple sources have similar information, synthesize them
+7. Maintain the friendly, supportive tone appropriate for student support
 
-Format your answer clearly and concisely."""
+Format your answer clearly and concisely. For video sources, always provide BOTH the clickable timestamp and the plain video URL."""
 
     try:
         answer, metadata = await adapter.generate_answer(

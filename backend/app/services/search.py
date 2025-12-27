@@ -59,7 +59,8 @@ def detect_recency_need(query: str) -> bool:
 async def vector_search(
     embedding: List[float],
     provider: str,
-    limit: int = 5
+    limit: int = 5,
+    course_id: str = None
 ) -> List[Dict[str, Any]]:
     """
     Perform vector similarity search using embeddings
@@ -67,6 +68,7 @@ async def vector_search(
         embedding: The query embedding vector
         provider: 'openai' or 'gemini' (determines which embedding field to use)
         limit: Maximum number of results
+        course_id: Optional course ID to filter results by specific course
     Returns:
         List of matched items with scores
     """
@@ -80,11 +82,18 @@ async def vector_search(
         # Note: We need to create a custom function for this, but for MVP
         # we'll use a simpler approach with manual distance calculation
 
-        # Get all items (in production, you'd use pgvector's similarity search)
-        response = db.table("knowledge_items").select(
+        # Build query with optional course filter
+        query = db.table("knowledge_items").select(
             "id, question_raw, question_enriched, answer, category, tags, "
-            f"date, source_url, {embedding_column}"
-        ).limit(100).execute()
+            f"date, source_url, {embedding_column}, content_type, "
+            "media_url, timecode_start, timecode_end, course_id, module_id, lesson_id"
+        )
+
+        # Apply course filter if specified
+        if course_id:
+            query = query.or_(f"course_id.eq.{course_id},course_id.is.null")
+
+        response = query.limit(100).execute()
 
         items = response.data
 
@@ -109,7 +118,8 @@ async def vector_search(
                 if isinstance(item_embedding, str):
                     item_embedding = json.loads(item_embedding)
                 score = cosine_similarity(embedding, item_embedding)
-                results.append({
+
+                result = {
                     "id": item["id"],
                     "question": item["question_enriched"] or item["question_raw"],
                     "answer": item["answer"],
@@ -118,8 +128,16 @@ async def vector_search(
                     "date": item.get("date"),
                     "source_url": item.get("source_url"),
                     "score": float(score),
-                    "match_type": "vector"
-                })
+                    "match_type": "vector",
+                    "content_type": item.get("content_type"),
+                    "media_url": item.get("media_url"),
+                    "timecode_start": item.get("timecode_start"),
+                    "timecode_end": item.get("timecode_end"),
+                    "course_id": item.get("course_id"),
+                    "module_id": item.get("module_id"),
+                    "lesson_id": item.get("lesson_id"),
+                }
+                results.append(result)
 
         # Sort by score and return top results
         results.sort(key=lambda x: x["score"], reverse=True)
@@ -130,12 +148,13 @@ async def vector_search(
         return []
 
 
-async def fulltext_search(query: str, limit: int = 5) -> List[Dict[str, Any]]:
+async def fulltext_search(query: str, limit: int = 5, course_id: str = None) -> List[Dict[str, Any]]:
     """
     Perform full-text search using Postgres tsvector
     Args:
         query: The search query
         limit: Maximum number of results
+        course_id: Optional course ID to filter results
     Returns:
         List of matched items with scores
     """
@@ -144,12 +163,19 @@ async def fulltext_search(query: str, limit: int = 5) -> List[Dict[str, Any]]:
     try:
         # Use keyword search with ilike (case-insensitive pattern matching)
         # For MVP, this is simpler than full postgres ts_search
-        response = db.table("knowledge_items").select(
+        query_builder = db.table("knowledge_items").select(
             "id, question_raw, question_enriched, answer, category, tags, "
-            "date, source_url"
+            "date, source_url, content_type, media_url, timecode_start, "
+            "timecode_end, course_id, module_id, lesson_id"
         ).or_(
             f"question_raw.ilike.%{query}%,question_enriched.ilike.%{query}%,answer.ilike.%{query}%"
-        ).limit(limit).execute()
+        )
+
+        # Apply course filter if specified
+        if course_id:
+            query_builder = query_builder.or_(f"course_id.eq.{course_id},course_id.is.null")
+
+        response = query_builder.limit(limit).execute()
 
         results = []
         for idx, item in enumerate(response.data):
@@ -164,7 +190,14 @@ async def fulltext_search(query: str, limit: int = 5) -> List[Dict[str, Any]]:
                 "date": item.get("date"),
                 "source_url": item.get("source_url"),
                 "score": max(0.1, score),  # Min score 0.1
-                "match_type": "fulltext"
+                "match_type": "fulltext",
+                "content_type": item.get("content_type"),
+                "media_url": item.get("media_url"),
+                "timecode_start": item.get("timecode_start"),
+                "timecode_end": item.get("timecode_end"),
+                "course_id": item.get("course_id"),
+                "module_id": item.get("module_id"),
+                "lesson_id": item.get("lesson_id"),
             })
 
         return results
@@ -177,7 +210,8 @@ async def fulltext_search(query: str, limit: int = 5) -> List[Dict[str, Any]]:
 async def hybrid_search(
     query: str,
     provider: str = "gemini",
-    limit: int = 5
+    limit: int = 5,
+    course_id: str = None
 ) -> List[Dict[str, Any]]:
     """
     Hybrid search combining vector and full-text search
@@ -185,6 +219,7 @@ async def hybrid_search(
         query: The search query
         provider: Model provider for embeddings
         limit: Maximum number of results
+        course_id: Optional course ID to filter results by specific course
     Returns:
         List of unique matched items with combined scores
     """
@@ -196,11 +231,11 @@ async def hybrid_search(
     except Exception as e:
         print(f"Embedding generation error: {e}")
         # Fallback to fulltext only
-        return await fulltext_search(query, limit)
+        return await fulltext_search(query, limit, course_id)
 
     # Perform both searches in parallel
-    vector_results = await vector_search(embedding, provider, limit * 2)
-    fulltext_results = await fulltext_search(query, limit * 2)
+    vector_results = await vector_search(embedding, provider, limit * 2, course_id)
+    fulltext_results = await fulltext_search(query, limit * 2, course_id)
 
     # Combine results with weighted scoring
     combined = {}

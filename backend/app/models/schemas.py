@@ -319,3 +319,194 @@ class UpdateContentResponse(BaseModel):
     success: bool
     message: str
     updated_item: ContentItem
+
+
+# ============================================================
+# Course Transcript Management Models
+# ============================================================
+
+
+class CreateCourseRequest(BaseModel):
+    """Request to create a new course"""
+
+    name: str = Field(..., description="Course name")
+    description: str = Field(..., description="Course description")
+    thumbnail_url: Optional[str] = Field(None, description="Course thumbnail URL")
+
+
+class CreateModuleRequest(BaseModel):
+    """Request to create a new module"""
+
+    name: str = Field(..., description="Module name")
+    description: str = Field(..., description="Module description")
+
+
+class CreateLessonRequest(BaseModel):
+    """Request to create a new lesson"""
+
+    name: str = Field(..., description="Lesson name")
+    description: str = Field(..., description="Lesson description")
+    video_url: Optional[str] = Field(None, description="External video URL")
+    video_platform: Optional[str] = Field(None, description="Video platform (vimeo, youtube, etc.)")
+
+
+class TranscribeRequest(BaseModel):
+    """Request to transcribe a video lesson"""
+
+    language: str = Field("en", description="Language code (e.g., en, es, fr)")
+    segment_duration: int = Field(45, ge=30, le=60, description="Target segment duration in seconds")
+
+
+class UploadVideoResponse(BaseModel):
+    """Response after uploading video"""
+
+    success: bool
+    video_url: str = Field(..., description="URL to uploaded video")
+    duration_seconds: Optional[int] = None
+
+
+class TranscriptionResponse(BaseModel):
+    """Response from transcription endpoint"""
+
+    success: bool
+    lesson_id: str
+    segments_created: int
+    segment_ids: List[str]
+    cost_usd: float
+    duration_seconds: int
+    language: str
+
+
+class UploadTranscriptResponse(BaseModel):
+    """Response after uploading transcript file"""
+
+    success: bool
+    lesson_id: str
+    segments_created: int
+    segment_ids: List[str]
+    format: str  # srt or vtt
+
+
+class Segment(BaseModel):
+    """Video transcript segment"""
+
+    id: str
+    lesson_id: str
+    text: str
+    timecode_start: int = Field(..., description="Start time in seconds")
+    timecode_end: int = Field(..., description="End time in seconds")
+    created_at: datetime
+    updated_at: datetime
+
+
+class UpdateSegmentRequest(BaseModel):
+    """Request to update a transcript segment"""
+
+    text: str = Field(..., description="Edited transcript text")
+    timecode_start: Optional[int] = Field(None, description="Start time in seconds")
+    timecode_end: Optional[int] = Field(None, description="End time in seconds")
+
+
+class CloneCourseRequest(BaseModel):
+    """Request to clone a course"""
+
+    new_name: str = Field(..., description="Name for cloned course")
+    regenerate_embeddings: bool = Field(
+        False,
+        description="If True, regenerate embeddings for all segments (slower, more expensive)"
+    )
+
+
+class CloneCourseResponse(BaseModel):
+    """Response from clone course endpoint"""
+
+    success: bool
+    new_course_id: str
+    message: str
+    segments_cloned: int
+    embeddings_regenerated: bool
+
+
+class CourseTreeNode(BaseModel):
+    """Single node in course tree (recursive)"""
+
+    id: str
+    name: str
+    description: str
+    type: str = Field(..., description="course, module, lesson, or segment")
+    hierarchy_level: int
+    children: List['CourseTreeNode'] = []
+    metadata: Dict[str, Any] = {}
+
+
+# Enable forward references for recursive model
+CourseTreeNode.model_rebuild()
+
+
+class Course(BaseModel):
+    """Course summary for grid view"""
+
+    id: str
+    name: str
+    description: str
+    thumbnail_url: Optional[str] = None
+    module_count: int = 0
+    lesson_count: int = 0
+    segment_count: int = 0
+    total_duration_seconds: int = 0
+    created_at: datetime
+    updated_at: datetime
+
+
+class CourseListResponse(BaseModel):
+    """Response with list of courses"""
+
+    courses: List[Course]
+    total_count: int
+
+
+class CourseTreeResponse(BaseModel):
+    """Response with full course tree"""
+
+    course: CourseTreeNode
+
+
+class Folder(BaseModel):
+    """Generic folder (course, module, or lesson)"""
+
+    id: str
+    name: str
+    description: str
+    type: str
+    parent_id: Optional[str] = None
+    metadata: Dict[str, Any] = {}
+
+
+class UpdateFolderRequest(BaseModel):
+    """Request to update folder metadata"""
+
+    name: Optional[str] = None
+    description: Optional[str] = None
+    thumbnail_url: Optional[str] = None
+    video_url: Optional[str] = None
+    video_duration_seconds: Optional[int] = None
+
+
+class DeleteFolderResponse(BaseModel):
+    """Response from delete folder endpoint"""
+
+    success: bool
+    deleted_count: int = Field(..., description="Total items deleted (including children)")
+    message: str
+
+
+class CourseStatsResponse(BaseModel):
+    """Course statistics"""
+
+    course_id: str
+    course_name: str
+    module_count: int
+    lesson_count: int
+    segment_count: int
+    total_duration_seconds: int
+    last_updated: datetime

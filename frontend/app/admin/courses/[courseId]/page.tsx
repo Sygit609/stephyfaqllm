@@ -1,0 +1,117 @@
+"use client"
+
+/**
+ * Course Detail Page
+ * Shows nested folder tree (Course → Modules → Lessons → Segments)
+ */
+
+import { useState, useEffect } from "react"
+import Link from "next/link"
+import { getCourseTree } from "@/lib/api/courses"
+import type { CourseTreeNode } from "@/lib/api/types"
+import FolderTreeView from "@/components/courses/FolderTreeView"
+
+export default function CourseDetailPage({ params }: { params: { courseId: string } }) {
+  const [courseTree, setCourseTree] = useState<CourseTreeNode | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set())
+
+  useEffect(() => {
+    loadCourseTree()
+  }, [params.courseId])
+
+  const loadCourseTree = async () => {
+    setIsLoading(true)
+    setError(null)
+
+    try {
+      const tree = await getCourseTree(params.courseId)
+      setCourseTree(tree)
+      // Auto-expand the course node
+      setExpandedNodes(new Set([tree.id]))
+    } catch (err: any) {
+      setError(err.response?.data?.detail || err.message || "Failed to load course")
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const toggleNode = (nodeId: string) => {
+    setExpandedNodes((prev) => {
+      const next = new Set(prev)
+      if (next.has(nodeId)) {
+        next.delete(nodeId)
+      } else {
+        next.add(nodeId)
+      }
+      return next
+    })
+  }
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-purple-50 via-white to-blue-50 py-8 px-4">
+      <div className="max-w-7xl mx-auto">
+        {/* Header */}
+        <div className="mb-8">
+          <Link
+            href="/admin/courses"
+            className="text-purple-600 hover:text-purple-700 font-medium mb-4 inline-block"
+          >
+            ← Back to Courses
+          </Link>
+
+          {courseTree && (
+            <>
+              <h1 className="text-3xl font-bold text-gray-900">{courseTree.name}</h1>
+              <p className="text-gray-600 mt-2">{courseTree.description}</p>
+            </>
+          )}
+        </div>
+
+        {/* Error */}
+        {error && (
+          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-6">
+            {error}
+          </div>
+        )}
+
+        {/* Loading */}
+        {isLoading && (
+          <div className="bg-white rounded-lg shadow-sm p-12 text-center">
+            <svg
+              className="animate-spin h-12 w-12 text-purple-600 mx-auto mb-4"
+              fill="none"
+              viewBox="0 0 24 24"
+            >
+              <circle
+                className="opacity-25"
+                cx="12"
+                cy="12"
+                r="10"
+                stroke="currentColor"
+                strokeWidth="4"
+              />
+              <path
+                className="opacity-75"
+                fill="currentColor"
+                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+              />
+            </svg>
+            <p className="text-gray-600">Loading course...</p>
+          </div>
+        )}
+
+        {/* Course Tree */}
+        {!isLoading && courseTree && (
+          <FolderTreeView
+            tree={courseTree}
+            expandedNodes={expandedNodes}
+            onToggle={toggleNode}
+            onRefresh={loadCourseTree}
+          />
+        )}
+      </div>
+    </div>
+  )
+}

@@ -3,7 +3,7 @@ API Endpoints
 All FastAPI route handlers
 """
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, UploadFile, File
 from app.models.schemas import (
     SearchRequest, SearchResponse, SourceMatch,
     AnswerRequest, AnswerResponse,
@@ -15,13 +15,25 @@ from app.models.schemas import (
     ExtractScreenshotRequest, ExtractScreenshotResponse, QAPair,
     SaveContentRequest, SaveContentResponse,
     ContentListFilter, ContentListResponse, ContentItem,
-    UpdateContentRequest, UpdateContentResponse
+    UpdateContentRequest, UpdateContentResponse,
+    CreateCourseRequest, CreateModuleRequest, CreateLessonRequest,
+    TranscribeRequest, TranscriptionResponse,
+    UploadVideoResponse, UploadTranscriptResponse,
+    Segment, UpdateSegmentRequest,
+    CloneCourseRequest, CloneCourseResponse,
+    CourseTreeNode, CourseTreeResponse,
+    Course, CourseListResponse,
+    Folder, UpdateFolderRequest, DeleteFolderResponse,
+    CourseStatsResponse
 )
 from app.services import search, web_search, generation, metrics
 from app.services import vision_extractor, content_manager
+from app.services.transcription import transcription_service
+from app.services.course_manager import course_manager
 from app.core.config import settings, validate_api_keys
 from app.core.database import get_db
 import base64
+import io
 
 router = APIRouter()
 
@@ -598,3 +610,475 @@ async def update_content_item(item_id: str, request: UpdateContentRequest):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Update error: {str(e)}")
+
+
+# ============================================================
+# Course Transcript Management Endpoints
+# ============================================================
+
+
+@router.post("/api/admin/courses", response_model=Course)
+async def create_course(request: CreateCourseRequest):
+    """Create a new course (Level 1)"""
+    try:
+        db = get_db()
+        course_id = await course_manager.create_course(
+            name=request.name,
+            description=request.description,
+            thumbnail_url=request.thumbnail_url,
+            db=db
+        )
+
+        # Fetch created course with stats
+        course_data = db.table("knowledge_items").select("*").eq("id", course_id).single().execute()
+        stats = await course_manager.get_course_stats(course_id, db)
+
+        return Course(
+            id=course_id,
+            name=course_data.data["question"],
+            description=course_data.data["answer"],
+            thumbnail_url=course_data.data.get("media_thumbnail"),
+            module_count=stats.get("module_count", 0),
+            lesson_count=stats.get("lesson_count", 0),
+            segment_count=stats.get("segment_count", 0),
+            total_duration_seconds=stats.get("total_duration_seconds", 0),
+            created_at=course_data.data["created_at"],
+            updated_at=course_data.data["updated_at"]
+        )
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Course creation error: {str(e)}")
+
+
+@router.get("/api/admin/courses", response_model=CourseListResponse)
+async def list_courses():
+    """List all courses with statistics"""
+    try:
+        db = get_db()
+
+        # Get all courses (hierarchy_level = 1)
+        courses_data = db.table("knowledge_items")\
+            .select("*")\
+            .eq("content_type", "video")\
+            .eq("hierarchy_level", 1)\
+            .order("created_at", desc=True)\
+            .execute()
+
+        courses = []
+        for course_data in courses_data.data:
+            stats = await course_manager.get_course_stats(course_data["id"], db)
+
+            courses.append(Course(
+                id=course_data["id"],
+                name=course_data["question"],
+                description=course_data["answer"],
+                thumbnail_url=course_data.get("media_thumbnail"),
+                module_count=stats.get("module_count", 0),
+                lesson_count=stats.get("lesson_count", 0),
+                segment_count=stats.get("segment_count", 0),
+                total_duration_seconds=stats.get("total_duration_seconds", 0),
+                created_at=course_data["created_at"],
+                updated_at=course_data["updated_at"]
+            ))
+
+        return CourseListResponse(
+            courses=courses,
+            total_count=len(courses)
+        )
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"List courses error: {str(e)}")
+
+
+@router.get("/api/admin/courses/{course_id}/tree", response_model=CourseTreeResponse)
+async def get_course_tree(course_id: str):
+    """Get complete course tree with all modules, lessons, and segments"""
+    try:
+        db = get_db()
+        tree = await course_manager.get_course_tree(course_id, db)
+
+        return CourseTreeResponse(course=tree)
+
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Get course tree error: {str(e)}")
+
+
+@router.post("/api/admin/courses/{course_id}/modules", response_model=Folder)
+async def create_module(course_id: str, request: CreateModuleRequest):
+    """Create a new module (Level 2) under a course"""
+    try:
+        db = get_db()
+        module_id = await course_manager.create_module(
+            course_id=course_id,
+            name=request.name,
+            description=request.description,
+            db=db
+        )
+
+        # Fetch created module
+        module_data = db.table("knowledge_items").select("*").eq("id", module_id).single().execute()
+
+        return Folder(
+            id=module_id,
+            name=module_data.data["question"],
+            description=module_data.data["answer"],
+            type="module",
+            parent_id=module_data.data.get("parent_id"),
+            metadata={}
+        )
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Module creation error: {str(e)}")
+
+
+@router.post("/api/admin/modules/{module_id}/lessons", response_model=Folder)
+async def create_lesson(module_id: str, request: CreateLessonRequest):
+    """Create a new lesson (Level 3) under a module"""
+    try:
+        db = get_db()
+
+        # Get module to find course_id
+        module_data = db.table("knowledge_items").select("course_id").eq("id", module_id).single().execute()
+        course_id = module_data.data["course_id"]
+
+        lesson_id = await course_manager.create_lesson(
+            module_id=module_id,
+            course_id=course_id,
+            name=request.name,
+            description=request.description,
+            video_url=request.video_url,
+            video_duration_seconds=None,
+            video_platform=request.video_platform,
+            db=db
+        )
+
+        # Fetch created lesson
+        lesson_data = db.table("knowledge_items").select("*").eq("id", lesson_id).single().execute()
+
+        return Folder(
+            id=lesson_id,
+            name=lesson_data.data["question"],
+            description=lesson_data.data["answer"],
+            type="lesson",
+            parent_id=lesson_data.data.get("parent_id"),
+            metadata={
+                "video_url": lesson_data.data.get("media_url"),
+                "video_platform": lesson_data.data.get("video_platform"),
+            }
+        )
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Lesson creation error: {str(e)}")
+
+
+@router.post("/api/admin/lessons/{lesson_id}/upload-video", response_model=UploadVideoResponse)
+async def upload_video(lesson_id: str, file: UploadFile = File(...)):
+    """Upload video file (to be stored in Supabase Storage or similar)"""
+    try:
+        # TODO: Implement video upload to Supabase Storage
+        # For MVP, return a placeholder response
+        raise HTTPException(
+            status_code=501,
+            detail="Video upload not yet implemented. Please provide external video URL when creating lesson."
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Video upload error: {str(e)}")
+
+
+@router.post("/api/admin/lessons/{lesson_id}/transcribe", response_model=TranscriptionResponse)
+async def transcribe_lesson(lesson_id: str, request: TranscribeRequest):
+    """Transcribe lesson video using Whisper API"""
+    try:
+        db = get_db()
+
+        # Get lesson data
+        lesson_data = db.table("knowledge_items").select("*").eq("id", lesson_id).single().execute()
+        if not lesson_data.data:
+            raise HTTPException(status_code=404, detail=f"Lesson {lesson_id} not found")
+
+        video_url = lesson_data.data.get("media_url")
+        if not video_url:
+            raise HTTPException(status_code=400, detail="Lesson has no video URL")
+
+        # TODO: Download video from URL to pass to Whisper
+        # For now, this will fail - need to implement video download
+        raise HTTPException(
+            status_code=501,
+            detail="Automatic transcription not yet implemented. Please upload .srt/.vtt file manually."
+        )
+
+        # Code for when video download is implemented:
+        # video_file = download_video(video_url)
+        # transcription = await transcription_service.transcribe_video(video_file, request.language)
+        # segments = transcription_service.parse_srt_to_segments(transcription["srt_text"], request.segment_duration)
+        # segment_ids = await transcription_service.create_transcript_segments(...)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Transcription error: {str(e)}")
+
+
+@router.post("/api/admin/lessons/{lesson_id}/upload-transcript", response_model=UploadTranscriptResponse)
+async def upload_transcript(lesson_id: str, file: UploadFile = File(...)):
+    """Upload manual transcript file (.srt or .vtt)"""
+    try:
+        db = get_db()
+
+        # Get lesson data
+        lesson_data = db.table("knowledge_items").select("*").eq("id", lesson_id).single().execute()
+        if not lesson_data.data:
+            raise HTTPException(status_code=404, detail=f"Lesson {lesson_id} not found")
+
+        course_id = lesson_data.data["course_id"]
+        module_id = lesson_data.data["module_id"]
+        video_url = lesson_data.data.get("media_url", "")
+        lesson_name = lesson_data.data["question"]
+
+        # Read file content
+        file_content = await file.read()
+        file_text = file_content.decode("utf-8")
+
+        # Determine format
+        file_format = "srt" if file.filename.endswith(".srt") else "vtt"
+
+        # Parse transcript
+        segments = transcription_service.parse_uploaded_transcript(file_text, file_format)
+
+        # Get module and course names for context
+        module_name = ""
+        course_name = ""
+        if module_id:
+            module_result = db.table("knowledge_items").select("question").eq("id", module_id).execute()
+            if module_result.data:
+                module_name = module_result.data[0]["question"]
+
+        if course_id:
+            course_result = db.table("knowledge_items").select("question").eq("id", course_id).execute()
+            if course_result.data:
+                course_name = course_result.data[0]["question"]
+
+        # Create segments
+        segment_ids = await transcription_service.create_transcript_segments(
+            lesson_id=lesson_id,
+            course_id=course_id,
+            module_id=module_id,
+            segments=segments,
+            video_url=video_url,
+            db=db,
+            lesson_name=lesson_name,
+            module_name=module_name,
+            course_name=course_name
+        )
+
+        return UploadTranscriptResponse(
+            success=True,
+            lesson_id=lesson_id,
+            segments_created=len(segment_ids),
+            segment_ids=segment_ids,
+            format=file_format
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Upload transcript error: {str(e)}")
+
+
+@router.get("/api/admin/lessons/{lesson_id}/segments", response_model=list[Segment])
+async def get_lesson_segments(lesson_id: str):
+    """Get all transcript segments for a lesson"""
+    try:
+        db = get_db()
+
+        segments_data = db.table("knowledge_items")\
+            .select("*")\
+            .eq("lesson_id", lesson_id)\
+            .eq("hierarchy_level", 4)\
+            .order("timecode_start", desc=False)\
+            .execute()
+
+        segments = [
+            Segment(
+                id=seg["id"],
+                lesson_id=seg["lesson_id"],
+                text=seg["answer"],
+                timecode_start=seg["timecode_start"],
+                timecode_end=seg["timecode_end"],
+                created_at=seg["created_at"],
+                updated_at=seg["updated_at"]
+            )
+            for seg in segments_data.data
+        ]
+
+        return segments
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Get segments error: {str(e)}")
+
+
+@router.put("/api/admin/segments/{segment_id}", response_model=Segment)
+async def update_segment(segment_id: str, request: UpdateSegmentRequest):
+    """Update a transcript segment"""
+    try:
+        db = get_db()
+
+        # Build update data
+        update_data = {"answer": request.text}
+        if request.timecode_start is not None:
+            update_data["timecode_start"] = request.timecode_start
+        if request.timecode_end is not None:
+            update_data["timecode_end"] = request.timecode_end
+
+        # Update segment
+        result = db.table("knowledge_items").update(update_data).eq("id", segment_id).execute()
+
+        if not result.data:
+            raise HTTPException(status_code=404, detail=f"Segment {segment_id} not found")
+
+        updated_seg = result.data[0]
+
+        return Segment(
+            id=updated_seg["id"],
+            lesson_id=updated_seg["lesson_id"],
+            text=updated_seg["answer"],
+            timecode_start=updated_seg["timecode_start"],
+            timecode_end=updated_seg["timecode_end"],
+            created_at=updated_seg["created_at"],
+            updated_at=updated_seg["updated_at"]
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Update segment error: {str(e)}")
+
+
+@router.put("/api/admin/folders/{folder_id}", response_model=Folder)
+async def update_folder(folder_id: str, request: UpdateFolderRequest):
+    """Update course/module/lesson metadata"""
+    try:
+        db = get_db()
+
+        updates = {}
+        if request.name:
+            updates["name"] = request.name
+        if request.description:
+            updates["description"] = request.description
+        if request.thumbnail_url:
+            updates["thumbnail_url"] = request.thumbnail_url
+        if request.video_url:
+            updates["video_url"] = request.video_url
+        if request.video_duration_seconds:
+            updates["video_duration_seconds"] = request.video_duration_seconds
+
+        success = await course_manager.update_folder(folder_id, updates, db)
+
+        if not success:
+            raise HTTPException(status_code=404, detail=f"Folder {folder_id} not found")
+
+        # Fetch updated folder
+        folder_data = db.table("knowledge_items").select("*").eq("id", folder_id).single().execute()
+        hierarchy_level = folder_data.data["hierarchy_level"]
+
+        type_map = {1: "course", 2: "module", 3: "lesson"}
+
+        return Folder(
+            id=folder_id,
+            name=folder_data.data["question"],
+            description=folder_data.data["answer"],
+            type=type_map.get(hierarchy_level, "unknown"),
+            parent_id=folder_data.data.get("parent_id"),
+            metadata={}
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Update folder error: {str(e)}")
+
+
+@router.delete("/api/admin/folders/{folder_id}", response_model=DeleteFolderResponse)
+async def delete_folder(folder_id: str):
+    """Delete folder (CASCADE deletes all children automatically)"""
+    try:
+        db = get_db()
+
+        result = await course_manager.delete_folder(folder_id, db)
+
+        return DeleteFolderResponse(
+            success=result["success"],
+            deleted_count=result["deleted_count"],
+            message=f"Successfully deleted {result['deleted_count']} items"
+        )
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Delete folder error: {str(e)}")
+
+
+@router.post("/api/admin/courses/{course_id}/clone", response_model=CloneCourseResponse)
+async def clone_course_endpoint(course_id: str, request: CloneCourseRequest):
+    """Clone entire course with all children"""
+    try:
+        db = get_db()
+
+        # Get segment count for reporting
+        segments_data = db.table("knowledge_items")\
+            .select("id", count="exact")\
+            .eq("course_id", course_id)\
+            .eq("hierarchy_level", 4)\
+            .execute()
+
+        segment_count = segments_data.count or 0
+
+        new_course_id = await course_manager.clone_course(
+            course_id=course_id,
+            new_name=request.new_name,
+            regenerate_embeddings=request.regenerate_embeddings,
+            db=db
+        )
+
+        return CloneCourseResponse(
+            success=True,
+            new_course_id=new_course_id,
+            message=f"Course cloned successfully as '{request.new_name}'",
+            segments_cloned=segment_count,
+            embeddings_regenerated=request.regenerate_embeddings
+        )
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Clone course error: {str(e)}")
+
+
+@router.get("/api/admin/courses/{course_id}/stats", response_model=CourseStatsResponse)
+async def get_course_stats(course_id: str):
+    """Get statistics for a course"""
+    try:
+        db = get_db()
+        stats = await course_manager.get_course_stats(course_id, db)
+
+        if not stats:
+            raise HTTPException(status_code=404, detail=f"Course {course_id} not found")
+
+        # Get course name
+        course_data = db.table("knowledge_items").select("question", "updated_at").eq("id", course_id).single().execute()
+
+        return CourseStatsResponse(
+            course_id=course_id,
+            course_name=course_data.data["question"],
+            module_count=stats.get("module_count", 0),
+            lesson_count=stats.get("lesson_count", 0),
+            segment_count=stats.get("segment_count", 0),
+            total_duration_seconds=stats.get("total_duration_seconds", 0),
+            last_updated=course_data.data["updated_at"]
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Get stats error: {str(e)}")

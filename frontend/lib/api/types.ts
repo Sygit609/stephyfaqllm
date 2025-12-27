@@ -333,3 +333,138 @@ export interface BatchSaveResponse {
   parent_ids: string[]
   child_ids: string[]
 }
+
+// ============================================================================
+// Course Transcript Management Types
+// ============================================================================
+
+export interface Course {
+  id: string
+  name: string
+  description: string
+  thumbnail_url: string | null
+  module_count: number
+  lesson_count: number
+  segment_count: number
+  total_duration_seconds: number
+  created_at: string
+  updated_at: string
+}
+
+export interface CourseListResponse {
+  courses: Course[]
+  total_count: number
+}
+
+export interface CourseTreeNode {
+  id: string
+  name: string
+  description: string
+  type: 'course' | 'module' | 'lesson' | 'segment'
+  hierarchy_level: number
+  children: CourseTreeNode[]
+  metadata: Record<string, any>
+}
+
+export interface CreateCourseRequest {
+  name: string
+  description: string
+  thumbnail_url?: string | null
+}
+
+export interface CreateModuleRequest {
+  name: string
+  description: string
+}
+
+export interface CreateLessonRequest {
+  name: string
+  description: string
+  video_url?: string | null
+  video_platform?: string | null
+}
+
+export interface TranscribeRequest {
+  language?: string
+  segment_duration?: number
+}
+
+export interface TranscriptionResponse {
+  success: boolean
+  lesson_id: string
+  segments_created: number
+  segment_ids: string[]
+  cost_usd: number
+  duration_seconds: number
+  language: string
+}
+
+export interface UploadTranscriptResponse {
+  success: boolean
+  lesson_id: string
+  segments_created: number
+  segment_ids: string[]
+  format: string
+}
+
+export interface Segment {
+  id: string
+  lesson_id: string
+  text: string
+  timecode_start: number
+  timecode_end: number
+  created_at: string
+  updated_at: string
+}
+
+export interface UpdateSegmentRequest {
+  text: string
+  timecode_start?: number | null
+  timecode_end?: number | null
+}
+
+export interface CloneCourseRequest {
+  new_name: string
+  regenerate_embeddings?: boolean
+}
+
+export interface CloneCourseResponse {
+  success: boolean
+  new_course_id: string
+  message: string
+  segments_cloned: number
+  embeddings_regenerated: boolean
+}
+
+export interface Folder {
+  id: string
+  name: string
+  description: string
+  type: string
+  parent_id: string | null
+  metadata: Record<string, any>
+}
+
+export interface UpdateFolderRequest {
+  name?: string | null
+  description?: string | null
+  thumbnail_url?: string | null
+  video_url?: string | null
+  video_duration_seconds?: number | null
+}
+
+export interface DeleteFolderResponse {
+  success: boolean
+  deleted_count: number
+  message: string
+}
+
+export interface CourseStatsResponse {
+  course_id: string
+  course_name: string
+  module_count: number
+  lesson_count: number
+  segment_count: number
+  total_duration_seconds: number
+  last_updated: string
+}
