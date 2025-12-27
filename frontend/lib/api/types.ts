@@ -285,6 +285,21 @@ export interface ContentListResponse {
   total_pages: number
 }
 
+export interface UpdateContentRequest {
+  question?: string
+  answer?: string
+  tags?: string
+  source_url?: string
+  content_type?: string
+  regenerate_embeddings?: boolean
+}
+
+export interface UpdateContentResponse {
+  success: boolean
+  message: string
+  updated_item: ContentItem
+}
+
 // ============================================================================
 // Batch Upload Types
 // ============================================================================

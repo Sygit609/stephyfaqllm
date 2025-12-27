@@ -2,8 +2,8 @@
 Pydantic Models for API Request/Response Schemas
 """
 
-from typing import List, Optional, Dict, Any
-from pydantic import BaseModel, Field
+from typing import List, Optional, Dict, Any, Union
+from pydantic import BaseModel, Field, validator
 from datetime import datetime
 from uuid import UUID
 
@@ -275,12 +275,19 @@ class ContentItem(BaseModel):
     answer: str
     source_url: Optional[str] = None
     media_url: Optional[str] = None
-    tags: Optional[str] = None
+    tags: Optional[Union[str, List[str]]] = None
     extracted_by: Optional[str] = None
     extraction_confidence: Optional[float] = None
     parent_id: Optional[str] = None
     created_at: datetime
     updated_at: datetime
+
+    @validator('tags', pre=True)
+    def convert_tags_to_string(cls, v):
+        """Convert list tags to comma-separated string"""
+        if isinstance(v, list):
+            return ', '.join(v)
+        return v
 
 
 class ContentListResponse(BaseModel):
@@ -291,3 +298,24 @@ class ContentListResponse(BaseModel):
     page: int
     page_size: int
     total_pages: int
+
+
+class UpdateContentRequest(BaseModel):
+    """Request to update a knowledge item"""
+
+    question: Optional[str] = None
+    answer: Optional[str] = None
+    tags: Optional[str] = None
+    source_url: Optional[str] = None
+    content_type: Optional[str] = None
+    regenerate_embeddings: Optional[bool] = Field(
+        False, description="Regenerate embeddings if question/answer changed"
+    )
+
+
+class UpdateContentResponse(BaseModel):
+    """Response from update endpoint"""
+
+    success: bool
+    message: str
+    updated_item: ContentItem

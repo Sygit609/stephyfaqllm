@@ -14,7 +14,8 @@ from app.models.schemas import (
     HealthResponse,
     ExtractScreenshotRequest, ExtractScreenshotResponse, QAPair,
     SaveContentRequest, SaveContentResponse,
-    ContentListFilter, ContentListResponse, ContentItem
+    ContentListFilter, ContentListResponse, ContentItem,
+    UpdateContentRequest, UpdateContentResponse
 )
 from app.services import search, web_search, generation, metrics
 from app.services import vision_extractor, content_manager
@@ -530,3 +531,70 @@ async def delete_content_item(item_id: str):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Delete error: {str(e)}")
+
+
+@router.put("/api/admin/content/{item_id}", response_model=UpdateContentResponse)
+async def update_content_item(item_id: str, request: UpdateContentRequest):
+    """
+    Update a knowledge item
+    Optionally regenerate embeddings if question/answer changed
+    """
+    try:
+        db = get_db()
+
+        # Build updates dictionary from non-None fields
+        updates = {}
+        if request.question is not None:
+            updates["question"] = request.question
+        if request.answer is not None:
+            updates["answer"] = request.answer
+        if request.tags is not None:
+            updates["tags"] = request.tags
+        if request.source_url is not None:
+            updates["source_url"] = request.source_url
+        if request.content_type is not None:
+            updates["content_type"] = request.content_type
+
+        if not updates:
+            raise HTTPException(status_code=400, detail="No fields to update")
+
+        # Update the item
+        success = await content_manager.update_knowledge_item(
+            db=db,
+            item_id=item_id,
+            updates=updates,
+            regenerate_embeddings=request.regenerate_embeddings or False
+        )
+
+        if not success:
+            raise HTTPException(status_code=404, detail="Content item not found")
+
+        # Fetch updated item
+        updated_item_data = content_manager.get_content_by_id(db, item_id)
+
+        if not updated_item_data:
+            raise HTTPException(status_code=404, detail="Content item not found after update")
+
+        return UpdateContentResponse(
+            success=True,
+            message="Content updated successfully",
+            updated_item=ContentItem(
+                id=str(updated_item_data["id"]),
+                content_type=updated_item_data["content_type"],
+                question=updated_item_data["question"],
+                answer=updated_item_data["answer"],
+                source_url=updated_item_data.get("source_url"),
+                media_url=updated_item_data.get("media_url"),
+                tags=updated_item_data.get("tags"),
+                extracted_by=updated_item_data.get("extracted_by"),
+                extraction_confidence=updated_item_data.get("extraction_confidence"),
+                parent_id=str(updated_item_data["parent_id"]) if updated_item_data.get("parent_id") else None,
+                created_at=updated_item_data["created_at"],
+                updated_at=updated_item_data["updated_at"]
+            )
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Update error: {str(e)}")

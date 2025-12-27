@@ -77,6 +77,7 @@ async def save_extracted_content(
         "extraction_confidence": float(overall_confidence),
         "raw_content": raw_extraction,
         "parent_id": None,  # This is the parent
+        "date": datetime.utcnow().date().isoformat(),  # Required field
         "created_at": datetime.utcnow().isoformat(),
         "updated_at": datetime.utcnow().isoformat(),
         # No embeddings for parent (it's just metadata)
@@ -113,10 +114,11 @@ async def save_extracted_content(
             "answer": answer,
             "source_url": source_url,
             "media_url": media_url,
-            "tags": ",".join(tags) if isinstance(tags, list) else tags,
+            "tags": tags if isinstance(tags, list) else [],  # Keep as array for PostgreSQL
             "extracted_by": extracted_by,
             "extraction_confidence": float(overall_confidence),
             "parent_id": parent_id,  # Link to parent
+            "date": datetime.utcnow().date().isoformat(),  # Required field
             "created_at": datetime.utcnow().isoformat(),
             "updated_at": datetime.utcnow().isoformat(),
             "embedding_openai": openai_emb,

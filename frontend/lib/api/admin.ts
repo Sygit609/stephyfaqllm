@@ -10,6 +10,8 @@ import type {
   SaveContentRequest,
   SaveContentResponse,
   ContentListResponse,
+  UpdateContentRequest,
+  UpdateContentResponse,
 } from "./types"
 
 /**
@@ -64,6 +66,20 @@ export async function deleteContent(
   itemId: string
 ): Promise<{ success: boolean; message: string; deleted_count: number }> {
   const response = await apiClient.delete(`/api/admin/content/${itemId}`)
+  return response.data
+}
+
+/**
+ * Update a content item
+ */
+export async function updateContent(
+  itemId: string,
+  updates: UpdateContentRequest
+): Promise<UpdateContentResponse> {
+  const response = await apiClient.put<UpdateContentResponse>(
+    `/api/admin/content/${itemId}`,
+    updates
+  )
   return response.data
 }
 
