@@ -185,6 +185,42 @@ class CourseManagerService:
 
         return build_tree(root)
 
+    async def get_folder_path(
+        self,
+        folder_id: str,
+        db: Client
+    ) -> List[str]:
+        """
+        Get the hierarchical path of folder names from root to the specified folder
+
+        Args:
+            folder_id: Folder UUID
+            db: Supabase client
+
+        Returns:
+            List of folder names from root (course) to current folder
+            Example: ["Course Name", "Module 1", "Lesson 3"]
+        """
+        path = []
+        current_id = folder_id
+
+        # Traverse up the tree until we reach the root
+        while current_id:
+            folder_result = db.table("knowledge_items").select("question, parent_id, hierarchy_level").eq("id", current_id).single().execute()
+            if not folder_result.data:
+                break
+
+            folder_data = folder_result.data
+            path.insert(0, folder_data["question"])  # Prepend to build path from root
+
+            # If we're at root (no parent), stop
+            if not folder_data.get("parent_id"):
+                break
+
+            current_id = folder_data.get("parent_id")
+
+        return path
+
     async def clone_course(
         self,
         course_id: str,

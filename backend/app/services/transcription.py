@@ -181,7 +181,7 @@ class TranscriptionService:
             context_text = f"{course_name} - {module_name} - {lesson_name} ({start_mm_ss}): {segment['text']}"
 
             # Generate dual embeddings
-            embeddings = await generate_dual_embeddings(context_text)
+            openai_embedding, gemini_embedding = await generate_dual_embeddings(context_text)
 
             # Create segment entry
             segment_data = {
@@ -197,10 +197,10 @@ class TranscriptionService:
                 "timecode_start": segment["start_time"],
                 "timecode_end": segment["end_time"],
                 "date": date.today().isoformat(),  # Required field from original schema
-                "embedding_openai": embeddings["openai"],
-                "embedding_gemini": embeddings["gemini"],
-                "extracted_by": "whisper",
-                "extraction_confidence": 1.0,  # Whisper is highly accurate
+                "embedding_openai": openai_embedding,
+                "embedding_gemini": gemini_embedding,
+                "extracted_by": "manual",  # Using 'manual' since 'whisper' not in DB constraint yet
+                "extraction_confidence": 1.0,  # Transcript is accurate
             }
 
             result = db.table("knowledge_items").insert(segment_data).execute()

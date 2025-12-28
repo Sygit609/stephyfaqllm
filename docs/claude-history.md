@@ -962,4 +962,203 @@ Course (Level 1) - No embeddings, stores course metadata
 - Implement Duplicate and Rename functionality (currently show alerts)
 - Enhance TranscriptUploadModal for multi-format support (.srt, .vtt, .txt, .mp4, .mov)
 
-**Session end:** December 28, 2025
+**Session continued:** December 28, 2025 (afternoon)
+
+---
+
+## 2025-12-28 (Transcript Upload & Metadata Management Enhancements)
+**Prompt:** Fix transcript display issues and add metadata management features including video URL, description, and delete functionality
+
+**Reasoning:** User discovered that uploaded transcripts were appearing in the sidebar as folders instead of only in the content area. Additionally, needed ability to add video URLs and descriptions for LLM search to provide students with video links, and ability to delete transcripts.
+
+**Issues Fixed:**
+
+1. **Transcript Segments Appearing in Sidebar:**
+   - Problem: Segments with `is_leaf: true` were rendering in left sidebar alongside folders
+   - Root cause: `renderTab` function wasn't filtering out leaf nodes properly
+   - Solution: Added dual filtering - check both `is_leaf` flag AND `timecode_start` presence
+   - Result: Transcripts now only appear in right content area, never in sidebar
+
+2. **Transcript Display Not Working:**
+   - Problem: After successful upload (200 OK), page didn't show transcript segments
+   - Root cause: Tree filtering was hiding segments, need to show them in content area
+   - Solution: Created dedicated "Transcript Segments" section in content area
+   - Result: Segments display in scrollable list with timecodes and full text
+
+**New Features Implemented:**
+
+1. **Video URL Field:**
+   - Editable input field stored in `media_url` database column
+   - Shows as clickable link when not editing
+   - Opens in new tab with `target="_blank"`
+   - Purpose: LLM can provide video link with timestamp when answering student questions
+
+2. **Description Field:**
+   - Multi-line textarea for additional context, links, resources
+   - Stored in `answer` database column (same as content)
+   - Displays as formatted text with `whitespace-pre-wrap`
+   - Similar to YouTube video descriptions
+
+3. **Edit Metadata Toggle:**
+   - "Edit Metadata" button switches to edit mode
+   - Shows Video URL input + Description textarea
+   - Save/Cancel buttons in edit mode
+   - Auto-loads existing values when tab selected via useEffect
+
+4. **Delete Transcript Functionality:**
+   - Red trash icon on each transcript segment
+   - Confirmation dialog before deletion
+   - Calls same `deleteFolder` endpoint (segments are knowledge_items)
+   - Refreshes tree after deletion
+
+5. **Conditional Upload Box:**
+   - Upload area now hidden after transcripts are added
+   - Only shows when folder has zero transcript segments
+   - Prevents UI clutter after upload
+   - Upload still available via 3-dot menu
+
+**Files Modified:**
+
+**Frontend:**
+- `frontend/components/courses/GoogleDocsTabsView.tsx`:
+  - Added state: `isEditingMetadata`, `videoUrl`, `description`
+  - Added `useEffect` to load metadata on tab selection
+  - Added `handleSaveMetadata()` - calls `updateFolder` API
+  - Added `handleDeleteTranscript()` - deletes segment
+  - Added metadata UI section (Video URL + Description fields)
+  - Added delete button to each transcript segment
+  - Made upload area conditional (only show if no transcripts)
+  - Enhanced transcript filtering to check both `is_leaf` and `timecode_start`
+
+**Backend:**
+- `backend/app/api/endpoints.py`:
+  - Changed `if request.field:` to `if request.field is not None:`
+  - Allows empty strings to be saved (clear fields)
+  - Properly handles null vs empty string distinction
+
+**Database Schema:**
+- Video URL stored in: `media_url` column
+- Description stored in: `answer` column
+- Both fields already existed, just repurposed
+
+**UI Layout (Current State):**
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│ [Course Name]                                               │
+│ [Course Description]                                        │
+├────────────┬────────────────────────────────────────────────┤
+│ Modules    │  [Selected Tab Name]                           │
+│ ────────   │  Add transcripts to this folder                │
+│            │                                                 │
+│ ▶ Module 1 │  Video URL: _____________________ [Edit]       │
+│ ▼ Module 2 │  Description: __________________ [Metadata]    │
+│   ▶ Sub 1  │  ___________________________                   │
+│   ▶ Sub 2  │                                                 │
+│ ▶ Module 3 │  ┌─ Transcript Segments (2) ──────────────┐   │
+│            │  │ [60:00] Welcome to your first...   [🗑] │   │
+│            │  │ [62:00] Now let's talk about...    [🗑] │   │
+│            │  └─────────────────────────────────────────┘   │
+│            │                                                 │
+└────────────┴────────────────────────────────────────────────┘
+```
+
+**Technical Implementation Details:**
+
+1. **Metadata Loading:**
+```typescript
+useEffect(() => {
+  if (selectedTab) {
+    const node = findNodeById(tree, selectedTab)
+    if (node) {
+      setVideoUrl(node.metadata?.media_url || "")
+      setDescription(node.description || "")
+      setIsEditingMetadata(false)
+    }
+  }
+}, [selectedTab, tree])
+```
+
+2. **Transcript Filtering:**
+```typescript
+// In renderTab - prevent rendering in sidebar
+if (node.is_leaf || node.metadata?.timecode_start != null) {
+  return null
+}
+
+// In content area - show only transcripts
+const transcripts = node?.children.filter(
+  c => c.is_leaf || c.metadata?.timecode_start != null
+) || []
+```
+
+3. **Conditional Upload Box:**
+```typescript
+{(() => {
+  const transcripts = node?.children.filter(
+    c => c.is_leaf || c.metadata?.timecode_start != null
+  ) || []
+
+  if (transcripts.length > 0) return null // Hide upload area
+
+  return <UploadBox />
+})()}
+```
+
+**Testing Results:**
+- ✅ Transcripts no longer appear in left sidebar
+- ✅ Transcripts display correctly in content area with full text
+- ✅ Video URL and Description fields save/load correctly
+- ✅ Delete transcript removes segment and refreshes UI
+- ✅ Upload box hides after transcripts added
+- ✅ Edit Metadata toggle works correctly
+- ✅ Drag-and-drop still works on first attempt
+- ✅ All previous functionality preserved
+
+**Use Case for LLM Search:**
+
+When a student asks: "How do I choose my niche?"
+
+The LLM can now:
+1. Search transcript segments via embeddings
+2. Find relevant segment at timestamp 60:00
+3. Return answer with:
+   - Transcript text from segment
+   - Video URL from folder metadata
+   - Timestamp to jump to specific moment
+   - Description with additional resources/links
+
+Example response:
+```
+According to the course material, here's what Kyle says about choosing a niche:
+
+"Choosing the right niche is about creating a strong foundation for your
+digital product and make an income streams out of it. When you align your
+expertise, your passion, and the market demand, you're positioning yourself
+in a niche that you can thrive and grow consistently."
+
+Watch the full explanation here:
+🎥 https://www.youtube.com/watch?v=... (timestamp: 60:00)
+
+Additional resources:
+- Download the "Find Your Winning Zone" PDF
+- See Module 2 description for more niche selection tools
+```
+
+**Current Git Status:**
+- Modified: 2 files
+  - `frontend/components/courses/GoogleDocsTabsView.tsx`
+  - `backend/app/api/endpoints.py`
+- Ready to commit and push
+
+**Both Servers Running:**
+- Backend: http://localhost:8001
+- Frontend: http://localhost:3002
+
+**Next Steps:**
+- ✅ Commit and push to GitHub
+- Apply database migration: `004_add_whisper_extracted_by.sql`
+- Test full LLM search flow with video timestamps
+- Implement Duplicate and Rename functionality
+
+**Session end:** December 28, 2025 (afternoon)

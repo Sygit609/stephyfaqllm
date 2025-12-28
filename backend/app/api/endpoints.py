@@ -866,15 +866,36 @@ async def upload_transcript(lesson_id: str, file: UploadFile = File(...)):
     try:
         db = get_db()
 
-        # Get lesson data
-        lesson_data = db.table("knowledge_items").select("*").eq("id", lesson_id).single().execute()
-        if not lesson_data.data:
-            raise HTTPException(status_code=404, detail=f"Lesson {lesson_id} not found")
+        # Get folder data (new structure)
+        folder_result = db.table("knowledge_items").select("*").eq("id", lesson_id).single().execute()
+        if not folder_result.data:
+            raise HTTPException(status_code=404, detail=f"Folder {lesson_id} not found")
 
-        course_id = lesson_data.data["course_id"]
-        module_id = lesson_data.data["module_id"]
-        video_url = lesson_data.data.get("media_url", "")
-        lesson_name = lesson_data.data["question"]
+        folder_data = folder_result.data
+        folder_name = folder_data.get("question", "")
+        video_url = folder_data.get("media_url", "")
+
+        # Get course_id by traversing up the tree to hierarchy_level 1
+        course_id = None
+        parent_id = folder_data.get("parent_id")
+        current_level = folder_data.get("hierarchy_level", 1)
+
+        # If already at course level, use current ID
+        if current_level == 1:
+            course_id = lesson_id
+        else:
+            # Traverse up to find course (level 1)
+            while parent_id and current_level > 1:
+                parent_result = db.table("knowledge_items").select("*").eq("id", parent_id).single().execute()
+                if parent_result.data:
+                    parent_data = parent_result.data
+                    current_level = parent_data.get("hierarchy_level", 1)
+                    if current_level == 1:
+                        course_id = parent_id
+                        break
+                    parent_id = parent_data.get("parent_id")
+                else:
+                    break
 
         # Read file content
         file_content = await file.read()
@@ -886,28 +907,20 @@ async def upload_transcript(lesson_id: str, file: UploadFile = File(...)):
         # Parse transcript
         segments = transcription_service.parse_uploaded_transcript(file_text, file_format)
 
-        # Get module and course names for context
-        module_name = ""
-        course_name = ""
-        if module_id:
-            module_result = db.table("knowledge_items").select("question").eq("id", module_id).execute()
-            if module_result.data:
-                module_name = module_result.data[0]["question"]
-
-        if course_id:
-            course_result = db.table("knowledge_items").select("question").eq("id", course_id).execute()
-            if course_result.data:
-                course_name = course_result.data[0]["question"]
+        # Build hierarchical context names
+        folder_path = await course_manager.get_folder_path(lesson_id, db)
+        course_name = folder_path[0] if len(folder_path) > 0 else ""
+        module_name = folder_path[1] if len(folder_path) > 1 else ""
 
         # Create segments
         segment_ids = await transcription_service.create_transcript_segments(
             lesson_id=lesson_id,
-            course_id=course_id,
-            module_id=module_id,
+            course_id=course_id or lesson_id,  # Use folder ID as fallback
+            module_id=None,  # No longer used in new structure
             segments=segments,
             video_url=video_url,
             db=db,
-            lesson_name=lesson_name,
+            lesson_name=folder_name,
             module_name=module_name,
             course_name=course_name
         )
@@ -923,6 +936,9 @@ async def upload_transcript(lesson_id: str, file: UploadFile = File(...)):
     except HTTPException:
         raise
     except Exception as e:
+        import traceback
+        error_details = traceback.format_exc()
+        print(f"Upload transcript error: {error_details}")
         raise HTTPException(status_code=500, detail=f"Upload transcript error: {str(e)}")
 
 
@@ -1002,15 +1018,15 @@ async def update_folder(folder_id: str, request: UpdateFolderRequest):
         db = get_db()
 
         updates = {}
-        if request.name:
+        if request.name is not None:
             updates["name"] = request.name
-        if request.description:
+        if request.description is not None:
             updates["description"] = request.description
-        if request.thumbnail_url:
+        if request.thumbnail_url is not None:
             updates["thumbnail_url"] = request.thumbnail_url
-        if request.video_url:
+        if request.video_url is not None:
             updates["video_url"] = request.video_url
-        if request.video_duration_seconds:
+        if request.video_duration_seconds is not None:
             updates["video_duration_seconds"] = request.video_duration_seconds
 
         success = await course_manager.update_folder(folder_id, updates, db)
