@@ -76,8 +76,23 @@ export async function createLesson(
 }
 
 // ============================================================
-// Folder Operations (Update/Delete)
+// Folder Operations (Create/Update/Delete)
 // ============================================================
+
+export async function createSubfolder(
+  parentId: string,
+  data: {
+    name: string
+    description: string
+    thumbnail_url: string | null
+  }
+): Promise<Folder> {
+  const response = await axios.post(
+    `${API_URL}/api/admin/folders/${parentId}/subfolder`,
+    data
+  )
+  return response.data
+}
 
 export async function updateFolder(
   folderId: string,

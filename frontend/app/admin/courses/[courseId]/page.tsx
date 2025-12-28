@@ -9,13 +9,14 @@ import { useState, useEffect } from "react"
 import Link from "next/link"
 import { getCourseTree } from "@/lib/api/courses"
 import type { CourseTreeNode } from "@/lib/api/types"
-import FolderTreeView from "@/components/courses/FolderTreeView"
+import GoogleDocsTabsView from "@/components/courses/GoogleDocsTabsView"
 
 export default function CourseDetailPage({ params }: { params: { courseId: string } }) {
   const [courseTree, setCourseTree] = useState<CourseTreeNode | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set())
+  const [isCreatingCourse, setIsCreatingCourse] = useState(false)
 
   useEffect(() => {
     loadCourseTree()
@@ -49,17 +50,46 @@ export default function CourseDetailPage({ params }: { params: { courseId: strin
     })
   }
 
+  const handleCreateNewModule = async () => {
+    setIsCreatingCourse(true)
+    try {
+      if (!courseTree) return
+
+      // Count existing direct children (modules) of the current course
+      const moduleCount = courseTree.children.filter(c => !c.is_leaf).length
+      const newName = `Module ${moduleCount + 1}`
+
+      // Import createSubfolder
+      const { createSubfolder } = await import("@/lib/api/courses")
+
+      await createSubfolder(params.courseId, {
+        name: newName,
+        description: "",
+        thumbnail_url: null
+      })
+
+      // Refresh the tree
+      loadCourseTree()
+    } catch (err: any) {
+      alert(err.message || "Failed to create module")
+    } finally {
+      setIsCreatingCourse(false)
+    }
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-50 via-white to-blue-50 py-8 px-4">
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="mb-8">
-          <Link
-            href="/admin/courses"
-            className="text-purple-600 hover:text-purple-700 font-medium mb-4 inline-block"
-          >
-            ← Back to Courses
-          </Link>
+          <div className="flex items-center justify-between mb-4">
+            <Link
+              href="/admin/courses"
+              className="text-purple-600 hover:text-purple-700 font-medium"
+            >
+              ← Back to Courses
+            </Link>
+          </div>
 
           {courseTree && (
             <>
@@ -102,13 +132,12 @@ export default function CourseDetailPage({ params }: { params: { courseId: strin
           </div>
         )}
 
-        {/* Course Tree */}
+        {/* Course Tree - Google Docs Style */}
         {!isLoading && courseTree && (
-          <FolderTreeView
+          <GoogleDocsTabsView
             tree={courseTree}
-            expandedNodes={expandedNodes}
-            onToggle={toggleNode}
             onRefresh={loadCourseTree}
+            onCreateModule={handleCreateNewModule}
           />
         )}
       </div>

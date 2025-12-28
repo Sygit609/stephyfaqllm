@@ -326,8 +326,16 @@ class UpdateContentResponse(BaseModel):
 # ============================================================
 
 
+class CreateFolderRequest(BaseModel):
+    """Request to create a new folder at any level"""
+
+    name: str = Field(..., description="Folder name")
+    description: str = Field(..., description="Folder description")
+    thumbnail_url: Optional[str] = Field(None, description="Folder thumbnail URL")
+
+
 class CreateCourseRequest(BaseModel):
-    """Request to create a new course"""
+    """Request to create a new course (root folder) - LEGACY"""
 
     name: str = Field(..., description="Course name")
     description: str = Field(..., description="Course description")
@@ -335,14 +343,14 @@ class CreateCourseRequest(BaseModel):
 
 
 class CreateModuleRequest(BaseModel):
-    """Request to create a new module"""
+    """Request to create a new module - LEGACY"""
 
     name: str = Field(..., description="Module name")
     description: str = Field(..., description="Module description")
 
 
 class CreateLessonRequest(BaseModel):
-    """Request to create a new lesson"""
+    """Request to create a new lesson - LEGACY"""
 
     name: str = Field(..., description="Lesson name")
     description: str = Field(..., description="Lesson description")

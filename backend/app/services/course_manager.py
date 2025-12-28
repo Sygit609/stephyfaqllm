@@ -1,6 +1,6 @@
 """
 Course Management Service
-Handles CRUD operations for 4-level course hierarchy
+Handles CRUD operations for flexible folder hierarchy with transcripts
 """
 
 from typing import Optional, Dict, List
@@ -9,10 +9,77 @@ from datetime import date
 from supabase import Client
 from app.services.content_manager import generate_dual_embeddings
 
+# Maximum folder nesting depth (4 levels: 1, 2, 3, 4)
+MAX_FOLDER_DEPTH = 4
+
 
 class CourseManagerService:
-    """Service for managing course hierarchy (Course → Module → Lesson → Segments)"""
+    """Service for managing flexible folder hierarchy (up to 4 levels) with transcripts"""
 
+    async def create_folder(
+        self,
+        name: str,
+        description: str,
+        parent_id: Optional[str],
+        thumbnail_url: Optional[str],
+        db: Client
+    ) -> str:
+        """
+        Create a new folder at any level
+
+        Args:
+            name: Folder name
+            description: Folder description
+            parent_id: Parent folder UUID (None for root level)
+            thumbnail_url: Optional thumbnail image URL
+            db: Supabase client
+
+        Returns:
+            Created folder ID
+
+        Raises:
+            ValueError: If max depth exceeded
+        """
+        # Determine hierarchy level
+        if parent_id is None:
+            hierarchy_level = 1
+            course_id = None  # Will be set to self after creation
+        else:
+            # Get parent to determine level
+            parent = db.table("knowledge_items").select("hierarchy_level, course_id").eq("id", parent_id).single().execute()
+            if not parent.data:
+                raise ValueError(f"Parent folder {parent_id} not found")
+
+            hierarchy_level = parent.data["hierarchy_level"] + 1
+
+            # Enforce max depth
+            if hierarchy_level > MAX_FOLDER_DEPTH:
+                raise ValueError(f"Maximum folder depth ({MAX_FOLDER_DEPTH}) exceeded")
+
+            course_id = parent.data["course_id"]
+
+        folder_data = {
+            "content_type": "video",  # Using "video" for folders (database constraint)
+            "hierarchy_level": hierarchy_level,
+            "question": name,
+            "answer": description,
+            "media_thumbnail": thumbnail_url,
+            "parent_id": parent_id,
+            "course_id": course_id,
+            "date": date.today().isoformat(),
+            # No embeddings for folders (only transcript segments have embeddings)
+        }
+
+        result = db.table("knowledge_items").insert(folder_data).execute()
+        folder_id = result.data[0]["id"]
+
+        # For root folders, set course_id to self
+        if parent_id is None:
+            db.table("knowledge_items").update({"course_id": folder_id}).eq("id", folder_id).execute()
+
+        return folder_id
+
+    # Keep legacy create_course for backward compatibility
     async def create_course(
         self,
         name: str,
@@ -20,37 +87,10 @@ class CourseManagerService:
         thumbnail_url: Optional[str],
         db: Client
     ) -> str:
-        """
-        Create a new course (Level 1)
+        """Legacy method - creates a root folder"""
+        return await self.create_folder(name, description, None, thumbnail_url, db)
 
-        Args:
-            name: Course name
-            description: Course description
-            thumbnail_url: Optional thumbnail image URL
-            db: Supabase client
-
-        Returns:
-            Created course ID
-        """
-        course_data = {
-            "content_type": "video",
-            "hierarchy_level": 1,
-            "question": name,
-            "answer": description,
-            "media_thumbnail": thumbnail_url,
-            "parent_id": None,
-            "date": date.today().isoformat(),  # Required field from original schema
-            # No embeddings for course level (only segments have embeddings)
-        }
-
-        result = db.table("knowledge_items").insert(course_data).execute()
-        course_id = result.data[0]["id"]
-
-        # Set course_id to self for quick filtering
-        db.table("knowledge_items").update({"course_id": course_id}).eq("id", course_id).execute()
-
-        return course_id
-
+    # Legacy methods for backward compatibility (redirect to create_folder)
     async def create_module(
         self,
         course_id: str,
@@ -58,36 +98,8 @@ class CourseManagerService:
         description: str,
         db: Client
     ) -> str:
-        """
-        Create a new module (Level 2) under a course
-
-        Args:
-            course_id: Parent course UUID
-            name: Module name
-            description: Module description
-            db: Supabase client
-
-        Returns:
-            Created module ID
-        """
-        module_data = {
-            "content_type": "video",
-            "hierarchy_level": 2,
-            "parent_id": course_id,
-            "course_id": course_id,
-            "question": name,
-            "answer": description,
-            "date": date.today().isoformat(),  # Required field from original schema
-            # No embeddings for module level
-        }
-
-        result = db.table("knowledge_items").insert(module_data).execute()
-        module_id = result.data[0]["id"]
-
-        # Set module_id to self
-        db.table("knowledge_items").update({"module_id": module_id}).eq("id", module_id).execute()
-
-        return module_id
+        """Legacy method - creates a subfolder under a course"""
+        return await self.create_folder(name, description, course_id, None, db)
 
     async def create_lesson(
         self,
@@ -100,49 +112,8 @@ class CourseManagerService:
         video_platform: Optional[str],
         db: Client
     ) -> str:
-        """
-        Create a new lesson (Level 3) under a module
-
-        Args:
-            module_id: Parent module UUID
-            course_id: Top-level course UUID
-            name: Lesson name
-            description: Lesson description
-            video_url: URL to video file
-            video_duration_seconds: Total video duration
-            video_platform: Platform hosting the video (vimeo, youtube, etc.)
-            db: Supabase client
-
-        Returns:
-            Created lesson ID
-        """
-        # Get module_id from parent module
-        module_result = db.table("knowledge_items").select("module_id").eq("id", module_id).execute()
-        if not module_result.data:
-            raise ValueError(f"Module {module_id} not found")
-
-        lesson_data = {
-            "content_type": "video",
-            "hierarchy_level": 3,
-            "parent_id": module_id,
-            "course_id": course_id,
-            "module_id": module_result.data[0]["module_id"],
-            "question": name,
-            "answer": description,
-            "media_url": video_url,
-            "video_duration_seconds": video_duration_seconds,
-            "video_platform": video_platform,
-            "date": date.today().isoformat(),  # Required field from original schema
-            # No embeddings for lesson level
-        }
-
-        result = db.table("knowledge_items").insert(lesson_data).execute()
-        lesson_id = result.data[0]["id"]
-
-        # Set lesson_id to self
-        db.table("knowledge_items").update({"lesson_id": lesson_id}).eq("id", lesson_id).execute()
-
-        return lesson_id
+        """Legacy method - creates a subfolder under a module"""
+        return await self.create_folder(name, description, module_id, None, db)
 
     async def get_course_tree(
         self,
@@ -150,48 +121,54 @@ class CourseManagerService:
         db: Client
     ) -> Dict:
         """
-        Get complete course tree (Course → Modules → Lessons → Segments)
+        Get complete course tree with folders and transcripts (mixed content)
 
         Args:
             course_id: Course UUID
             db: Supabase client
 
         Returns:
-            Nested dict representing the full course hierarchy
+            Nested dict representing the full course hierarchy with mixed content
         """
         # Query all items in this course
         result = db.table("knowledge_items")\
             .select("*")\
             .eq("course_id", course_id)\
             .order("hierarchy_level", desc=False)\
+            .order("content_type", desc=True)\
             .order("created_at", desc=False)\
             .execute()
 
         if not result.data:
             raise ValueError(f"Course {course_id} not found")
 
-        # Build hierarchical structure
-        items_by_id = {item["id"]: item for item in result.data}
-
-        # Find root course
-        course = next((item for item in result.data if item["hierarchy_level"] == 1), None)
-        if not course:
+        # Find root folder
+        root = next((item for item in result.data if item["hierarchy_level"] == 1), None)
+        if not root:
             raise ValueError(f"Course {course_id} has no root node")
 
-        # Build tree recursively
+        # Build tree recursively (folders and transcripts can be mixed)
         def build_tree(node: Dict) -> Dict:
             """Recursively build tree from flat structure"""
+            # Get all children (both folders and transcript segments)
             children = [
                 build_tree(item) for item in result.data
                 if item.get("parent_id") == node["id"]
             ]
 
+            # Determine if this is a transcript segment (has timecode)
+            # Folders use content_type="video", transcripts have timecode_start
+            is_transcript = node.get("timecode_start") is not None
+            node_type = "transcript" if is_transcript else "folder"
+
             return {
                 "id": node["id"],
                 "name": node["question"],
                 "description": node["answer"],
-                "type": self._get_type_from_level(node["hierarchy_level"]),
+                "type": node_type,
+                "content_type": node.get("content_type"),  # "video" for folders, various for transcripts
                 "hierarchy_level": node["hierarchy_level"],
+                "is_leaf": is_transcript,  # Transcripts are leaf nodes (have timecode)
                 "children": children,
                 "metadata": {
                     "media_url": node.get("media_url"),
@@ -206,7 +183,7 @@ class CourseManagerService:
                 }
             }
 
-        return build_tree(course)
+        return build_tree(root)
 
     async def clone_course(
         self,
@@ -389,7 +366,7 @@ class CourseManagerService:
         lesson_count = sum(1 for item in items.data if item["hierarchy_level"] == 3)
         segment_count = sum(1 for item in items.data if item["hierarchy_level"] == 4)
         total_duration = sum(
-            item.get("video_duration_seconds", 0)
+            item.get("video_duration_seconds") or 0
             for item in items.data
             if item["hierarchy_level"] == 3
         )
@@ -402,12 +379,14 @@ class CourseManagerService:
         }
 
     def _get_type_from_level(self, level: int) -> str:
-        """Convert hierarchy level to type string"""
+        """Legacy method - convert hierarchy level to type string"""
+        # Note: This is deprecated, use timecode_start presence to identify transcripts
+        # All folders use content_type="video" due to database constraint
         type_map = {
-            1: "course",
-            2: "module",
-            3: "lesson",
-            4: "segment"
+            1: "folder",
+            2: "folder",
+            3: "folder",
+            4: "transcript"
         }
         return type_map.get(level, "unknown")
 

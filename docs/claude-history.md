@@ -846,3 +846,120 @@ Course (Level 1) - No embeddings, stores course metadata
 - Commit and push all changes to GitHub
 
 **Session end:** December 27, 2025 (afternoon)
+
+---
+## 2025-12-28 (Google Docs-Style UI Overhaul for Course Management)
+**Prompt:** Transform course management UI to match Google Docs layout with horizontal tabs, sidebar navigation, and improved UX
+
+**Reasoning:** User wanted to simplify the course folder structure and make it more intuitive by adopting Google Docs' familiar tab pattern. This involved removing rigid hierarchy types and creating a flexible folder system where any folder can contain both subfolders and transcripts.
+
+**Actions taken:**
+
+1. **UI/UX Redesign - Google Docs-Style Layout:**
+   - Created GoogleDocsTabsView component replacing old tree view
+   - Left sidebar (320px) with vertical tabs and nested indentation
+   - Right content area showing selected tab content
+   - Separate expand/collapse (arrow) vs. selection (click tab name) behavior
+   - Header with "Modules" label and + button at top of sidebar
+   - 3-dot menu on each tab (Add subtab, Upload transcript, Duplicate, Rename, Delete)
+
+2. **Tab Selection Behavior Fixed:**
+   - Separated `expandedTabs` state from `selectedTab` state
+   - Arrow button toggles expansion (shows/hides children)
+   - Clicking tab name selects tab and shows content on right
+   - Independent expand/collapse and selection actions
+   - Prevents accordion collapse when selecting tab
+
+3. **Content Area Enhancements:**
+   - Dynamic title showing selected tab's name
+   - Description: "Add transcripts to this [module/lesson]"
+   - Upload area always visible with drag-drop support
+   - File format hints (.srt, .vtt, .txt, .mp4, .mov)
+
+4. **Component Hierarchy:**
+   - page.tsx: Removed + button from header, passed handleCreateNewModule as prop
+   - GoogleDocsTabsView: Main layout with sidebar and content area
+   - TranscriptUploadModal: Handles file uploads (reused from Phase 3)
+
+5. **Z-index and Overflow Fixes:**
+   - Fixed dropdown menus being covered/clipped
+   - Changed overflow-hidden to overflow-visible in FolderTreeView
+   - Increased dropdown z-index to z-40/z-50
+
+6. **Database Constraint Workaround:**
+   - Database only allows content_type: ['video', 'manual']
+   - Using "video" for folders, "manual" for manual entries
+   - Distinguished transcripts via timecode_start presence (not null = transcript)
+
+**Files created:**
+- frontend/components/courses/GoogleDocsTabsView.tsx (277 lines)
+
+**Files modified:**
+- frontend/app/admin/courses/[courseId]/page.tsx (removed header + button, passed onCreateModule prop)
+- frontend/components/courses/FolderTreeView.tsx (overflow fix)
+- frontend/components/courses/FolderTreeNode.tsx (z-index fix)
+- backend/app/services/course_manager.py (changed content_type to "video" for folders)
+
+**Key UI Improvements:**
+- ✅ Google Docs-style horizontal tabs with sidebar
+- ✅ Nested tab indentation with expand/collapse
+- ✅ Separate expand vs. select behavior
+- ✅ + button at top of tabs sidebar
+- ✅ Selected tab name shown as content title
+- ✅ 3-dot menu with contextual actions
+- ✅ Upload area always visible when tab selected
+- ✅ Dropdown menus no longer covered
+
+**User Experience Flow:**
+1. Click + button at top → Creates "Module 1", "Module 2", etc.
+2. Click arrow icon → Expands/collapses nested tabs
+3. Click tab name → Selects tab, shows content on right
+4. Click 3-dot menu → Add subtab, Upload transcript, Duplicate, Rename, Delete
+5. Click upload area → Opens transcript upload modal
+
+**Technical Implementation:**
+- useState hooks for selectedTab and expandedTabs (Set<string>)
+- Recursive renderTab() function with level parameter for indentation
+- stopPropagation() on arrow and menu buttons to prevent selection
+- findNodeById() helper for looking up selected node
+- Flexbox layout with border-r separator
+- Conditional rendering based on selection state
+
+**Architecture Decisions:**
+- No breaking changes to backend API
+- Reused existing folder/subfolder creation endpoints
+- Compatible with Phase 3 screenshot extraction
+- Works with existing dual embedding system
+- Maintains CASCADE DELETE parent-child relationships
+
+**Testing Results:**
+- ✅ + button creates modules correctly
+- ✅ Expand/collapse works independently from selection
+- ✅ Tab selection shows content on right
+- ✅ Content title updates dynamically
+- ✅ Dropdown menus display properly (z-index fixed)
+- ✅ Upload modal opens correctly
+- ✅ All existing functionality preserved
+
+**Git Status:**
+- Files modified: 4 files
+- Files created: 1 file
+- Ready to commit and push
+
+**Current Status:**
+- ✅ Google Docs-style UI complete
+- ✅ Tab selection behavior fixed
+- ✅ Content area showing selected tab
+- ✅ All dropdown menus working
+- 🎯 Ready to commit and push to GitHub
+
+**Both servers running:**
+- Backend: http://localhost:8001
+- Frontend: http://localhost:3002
+
+**Next Steps:**
+- Commit changes to GitHub
+- Implement Duplicate and Rename functionality (currently show alerts)
+- Enhance TranscriptUploadModal for multi-format support (.srt, .vtt, .txt, .mp4, .mov)
+
+**Session end:** December 28, 2025

@@ -16,7 +16,7 @@ from app.models.schemas import (
     SaveContentRequest, SaveContentResponse,
     ContentListFilter, ContentListResponse, ContentItem,
     UpdateContentRequest, UpdateContentResponse,
-    CreateCourseRequest, CreateModuleRequest, CreateLessonRequest,
+    CreateFolderRequest, CreateCourseRequest, CreateModuleRequest, CreateLessonRequest,
     TranscribeRequest, TranscriptionResponse,
     UploadVideoResponse, UploadTranscriptResponse,
     Segment, UpdateSegmentRequest,
@@ -656,11 +656,12 @@ async def list_courses():
     try:
         db = get_db()
 
-        # Get all courses (hierarchy_level = 1)
+        # Get all root folders (hierarchy_level = 1)
+        # Support both old "video" and new "folder" content types for backwards compatibility
         courses_data = db.table("knowledge_items")\
             .select("*")\
-            .eq("content_type", "video")\
             .eq("hierarchy_level", 1)\
+            .in_("content_type", ["video", "folder"])\
             .order("created_at", desc=True)\
             .execute()
 
@@ -705,9 +706,44 @@ async def get_course_tree(course_id: str):
         raise HTTPException(status_code=500, detail=f"Get course tree error: {str(e)}")
 
 
+@router.post("/api/admin/folders/{parent_id}/subfolder", response_model=Folder)
+async def create_subfolder(parent_id: str, request: CreateFolderRequest):
+    """Create a new subfolder under any folder (generic)"""
+    try:
+        db = get_db()
+        folder_id = await course_manager.create_folder(
+            name=request.name,
+            description=request.description,
+            parent_id=parent_id,
+            thumbnail_url=request.thumbnail_url,
+            db=db
+        )
+
+        # Fetch created folder
+        folder_data = db.table("knowledge_items").select("*").eq("id", folder_id).single().execute()
+
+        return Folder(
+            id=folder_id,
+            name=folder_data.data["question"],
+            description=folder_data.data["answer"],
+            type="folder",
+            parent_id=folder_data.data.get("parent_id"),
+            metadata={
+                "hierarchy_level": folder_data.data.get("hierarchy_level"),
+                "content_type": folder_data.data.get("content_type"),
+                "media_thumbnail": folder_data.data.get("media_thumbnail"),
+            }
+        )
+
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Folder creation error: {str(e)}")
+
+
 @router.post("/api/admin/courses/{course_id}/modules", response_model=Folder)
 async def create_module(course_id: str, request: CreateModuleRequest):
-    """Create a new module (Level 2) under a course"""
+    """Create a new module (Level 2) under a course - LEGACY, use /folders/{id}/subfolder instead"""
     try:
         db = get_db()
         module_id = await course_manager.create_module(
@@ -724,7 +760,7 @@ async def create_module(course_id: str, request: CreateModuleRequest):
             id=module_id,
             name=module_data.data["question"],
             description=module_data.data["answer"],
-            type="module",
+            type="folder",
             parent_id=module_data.data.get("parent_id"),
             metadata={}
         )

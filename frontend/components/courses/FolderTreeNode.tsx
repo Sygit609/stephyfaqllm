@@ -7,7 +7,7 @@
 
 import { useState } from "react"
 import type { CourseTreeNode } from "@/lib/api/types"
-import { deleteFolder } from "@/lib/api/courses"
+import { deleteFolder, createSubfolder } from "@/lib/api/courses"
 import AddContentDropdown from "./AddContentDropdown"
 import TranscriptUploadModal from "./TranscriptUploadModal"
 
@@ -29,7 +29,12 @@ export default function FolderTreeNode({
   onRefresh
 }: Props) {
   const [showUploadModal, setShowUploadModal] = useState(false)
+  const [showMenu, setShowMenu] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
+  const [isCreatingSubfolder, setIsCreatingSubfolder] = useState(false)
+
+  // Max depth is 4 levels (1, 2, 3, 4)
+  const canAddSubfolder = node.hierarchy_level < 4
 
   const getIcon = () => {
     switch (node.type) {
@@ -69,6 +74,39 @@ export default function FolderTreeNode({
     }
   }
 
+  const handleAddSubfolder = async () => {
+    setIsCreatingSubfolder(true)
+    setShowMenu(false)
+    try {
+      // Count existing subfolders to generate name (exclude transcripts which are leaves)
+      const subfolderCount = node.children.filter(c => !c.is_leaf).length
+      const newName = `Subfolder ${subfolderCount + 1}`
+
+      await createSubfolder(node.id, {
+        name: newName,
+        description: "",
+        thumbnail_url: null
+      })
+      onRefresh()
+    } catch (err: any) {
+      alert(err.message || "Failed to create subfolder")
+    } finally {
+      setIsCreatingSubfolder(false)
+    }
+  }
+
+  const handleDuplicate = async () => {
+    setShowMenu(false)
+    // TODO: Implement duplicate functionality
+    alert("Duplicate functionality coming soon")
+  }
+
+  const handleRename = () => {
+    setShowMenu(false)
+    // TODO: Implement rename functionality
+    alert("Rename functionality coming soon")
+  }
+
   const indentClass = `ml-${level * 6}`
 
   return (
@@ -99,55 +137,77 @@ export default function FolderTreeNode({
         {/* Name */}
         <span className="flex-1 font-medium text-gray-900">{node.name}</span>
 
-        {/* Actions (show on hover) */}
-        <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-          {/* Add Content (for course, module) */}
-          {(node.type === "course" || node.type === "module") && (
-            <AddContentDropdown node={node} onRefresh={onRefresh} />
-          )}
-
-          {/* Upload Transcript (for lesson) */}
-          {node.type === "lesson" && (
-            <button
-              onClick={() => setShowUploadModal(true)}
-              className="px-2 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-700"
-              title="Upload transcript"
-            >
-              + Transcript
-            </button>
-          )}
-
-          {/* View */}
+        {/* 3-dot menu (always visible like Google Docs) */}
+        <div className="relative flex items-center gap-2">
           <button
-            onClick={() => onToggle(node.id)}
-            className="p-1 text-gray-400 hover:text-gray-600"
-            title="Toggle view"
+            onClick={() => setShowMenu(!showMenu)}
+            className="p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded"
+            title="More options"
           >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+            <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z" />
             </svg>
           </button>
 
-          {/* Delete */}
-          {node.type !== "course" && (
-            <button
-              onClick={handleDelete}
-              disabled={isDeleting}
-              className="p-1 text-red-400 hover:text-red-600 disabled:opacity-50"
-              title="Delete"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-              </svg>
-            </button>
+          {/* Dropdown Menu */}
+          {showMenu && (
+            <>
+              <div className="fixed inset-0 z-40" onClick={() => setShowMenu(false)} />
+              <div className="absolute right-0 top-8 z-50 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-1">
+                {canAddSubfolder && (
+                  <button
+                    onClick={handleAddSubfolder}
+                    disabled={isCreatingSubfolder}
+                    className="w-full px-4 py-2 text-left text-sm hover:bg-gray-100 flex items-center gap-2 disabled:opacity-50"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                    </svg>
+                    {isCreatingSubfolder ? "Creating..." : "Add subtab"}
+                  </button>
+                )}
+                <button
+                  onClick={handleDuplicate}
+                  className="w-full px-4 py-2 text-left text-sm hover:bg-gray-100 flex items-center gap-2"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                  </svg>
+                  Duplicate
+                </button>
+                <button
+                  onClick={handleRename}
+                  className="w-full px-4 py-2 text-left text-sm hover:bg-gray-100 flex items-center gap-2"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                  </svg>
+                  Rename
+                </button>
+                <div className="border-t border-gray-200 my-1"></div>
+                <button
+                  onClick={() => {
+                    handleDelete()
+                    setShowMenu(false)
+                  }}
+                  disabled={isDeleting}
+                  className="w-full px-4 py-2 text-left text-sm hover:bg-gray-100 text-red-600 flex items-center gap-2 disabled:opacity-50"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
+                  Delete
+                </button>
+              </div>
+            </>
           )}
         </div>
       </div>
 
-      {/* Children (recursive) */}
-      {isExpanded && node.children.length > 0 && (
+      {/* Children (recursive) AND Empty State */}
+      {isExpanded && (
         <div className="ml-6">
+          {/* Show existing children */}
           {node.children.map((child) => (
             <FolderTreeNode
               key={child.id}
@@ -159,6 +219,24 @@ export default function FolderTreeNode({
               onRefresh={onRefresh}
             />
           ))}
+
+          {/* Always show empty state for uploading transcripts */}
+          <div
+            onClick={() => setShowUploadModal(true)}
+            className="mt-2 mb-4 p-8 border-2 border-dashed border-gray-300 rounded-lg hover:border-purple-400 hover:bg-purple-50 transition-colors cursor-pointer"
+          >
+            <div className="text-center">
+              <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+              </svg>
+              <p className="mt-2 text-sm text-gray-600">
+                <span className="font-semibold">Add course transcripts here</span>
+              </p>
+              <p className="mt-1 text-xs text-gray-500">
+                Drop .srt, .vtt, .txt, .mp4, .mov files here or click to upload
+              </p>
+            </div>
+          </div>
         </div>
       )}
 

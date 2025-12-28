@@ -24,7 +24,7 @@ export default function FolderTreeView({
   onRefresh
 }: Props) {
   return (
-    <div className="bg-white rounded-lg shadow-sm overflow-hidden">
+    <div className="bg-white rounded-lg shadow-sm overflow-visible">
       <div className="p-6">
         {/* Course Root Node */}
         <FolderTreeNode
