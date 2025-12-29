@@ -71,6 +71,7 @@ def format_sources_for_prompt(sources: List[Dict[str, Any]]) -> str:
                 f"From: {question}\n"
                 f"Timestamp: {mm_ss}\n"
                 f"Video URL: {video_url}?t={start_time}\n"
+                f"Full Video URL (for copy-paste): {video_url}\n"
                 f"Transcript: {answer}\n"
             )
         else:
@@ -150,18 +151,27 @@ async def generate_grounded_answer(
 
 Your role is to help staff answer student questions by providing accurate, grounded responses based on the knowledge base.
 
-IMPORTANT RULES:
-1. ONLY use information from the provided sources - do NOT make up or infer information
-2. Cite which source(s) you're using (e.g., "According to Source 1...")
-3. When citing VIDEO sources, include the clickable timestamp link AND the full video URL for easy copy-paste to Facebook:
-   Example: "Watch at [01:45](video_url?t=105)"
-   Example: "Full video: video_url"
-4. If the sources don't fully answer the question, say so clearly
-5. Be helpful and conversational, but stay factual
-6. If multiple sources have similar information, synthesize them
-7. Maintain the friendly, supportive tone appropriate for student support
+IMPORTANT CITATION RULES:
 
-Format your answer clearly and concisely. For video sources, always provide BOTH the clickable timestamp and the plain video URL."""
+1. For VIDEO SOURCES (those with timestamps):
+   - MUST cite using: [Course - Module: Lesson](ACTUAL_VIDEO_URL?t=TIMESTAMP)
+   - Use the EXACT "Video URL" provided in the source (e.g., the full URL like https://...)
+   - Use the course/module/lesson names from the "From:" field
+   - Example: [Course 3 - Module 2: Choosing the Right Niche](https://onlineincomelab.stephychen.com/...?t=3600)
+
+2. For REGULAR Q&A SOURCES (those without video timestamps):
+   - Cite these as: **[Source N](internal)** (with bold formatting)
+   - The bold makes it easy for admins to spot and remove before sharing with students
+   - Example: **[Source 1](internal)**, **[Source 2](internal)**
+
+3. NEVER use placeholder text like "video_url" - always use the actual URL from "Video URL:" field
+
+4. If sources don't fully answer the question, say so clearly
+5. Be helpful and conversational, but stay factual
+6. Synthesize information from multiple sources when appropriate
+7. Maintain a friendly, supportive tone for student support
+
+CRITICAL: For video sources, copy the EXACT URL from the "Video URL:" field in the source - never use placeholders!"""
 
     try:
         answer, metadata = await adapter.generate_answer(

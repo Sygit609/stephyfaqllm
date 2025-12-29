@@ -1162,3 +1162,77 @@ Additional resources:
 - Implement Duplicate and Rename functionality
 
 **Session end:** December 28, 2025 (afternoon)
+
+---
+## 2025-12-30 (Search Error Fix & Citation Improvements)
+**Prompt:** User reported search error when testing course transcript functionality. Error: "2 validation errors for SourceMatch - question Input should be a valid string [type=string_type, input_value=None]"
+
+**Root Cause Analysis:**
+The search code in `backend/app/services/search.py` was failing because transcript segments don't populate `question_raw` or `question_enriched` fields - they only use the `question` field (which contains "Transcript from {lesson_name} at {timestamp}").
+
+When the search tried to construct SourceMatch results using:
+```python
+"question": item["question_enriched"] or item["question_raw"]
+```
+Both values were None for transcripts, causing Pydantic validation to fail.
+
+**Actions / Changes:**
+
+1. **Fixed Search Error** - Updated `backend/app/services/search.py`:
+   - Line 87: Added `question` to SELECT query in `vector_search()`
+   - Line 124: Fixed question field assignment: `item["question_enriched"] or item["question_raw"] or item.get("question", "")`
+   - Line 127: Fixed tags handling: `item.get("tags") or []` to ensure always returns list, never None
+   - Line 167: Added `question` to SELECT query in `fulltext_search()`
+   - Line 186: Same question field fallback chain
+   - Line 189: Same tags handling fix
+
+2. **Improved Citation Format** - Updated `backend/app/services/generation.py`:
+   - Updated system prompt to instruct LLM to cite video sources with actual URLs
+   - Format: `[Course Name - Module Name: Lesson Name](actual_video_url?t=timestamp)`
+   - For regular Q&A sources: `[Source N](internal)` (easy for admins to spot and remove)
+   - Added explicit instruction: "NEVER use placeholder text like 'video_url' - always use the actual URL from 'Video URL:' field"
+
+3. **Attempted Course Hierarchy Names** (later reverted):
+   - Initially tried to fetch course/module/lesson names via database queries
+   - Created `get_course_hierarchy_names()` and `get_all_hierarchy_names()` functions
+   - **Problem:** Caused 30-second timeout due to additional database calls
+   - **Solution:** Reverted to using existing `question` field data without extra queries
+   - Kept simple approach: Use transcript segment name directly from existing data
+
+4. **Fixed Syntax Error:**
+   - Line 174: Added missing `"""` to close docstring in system_prompt
+
+**Files Touched:**
+- `backend/app/services/search.py` - Fixed None value handling for transcript searches
+- `backend/app/services/generation.py` - Updated citation format in system prompt
+
+**Configuration:**
+- Backend running on port 8001 (changed from 8000 to avoid conflict with user's other project)
+- Frontend running on port 3002
+- Updated `frontend/.env.local` to use http://localhost:8001
+
+**Testing Results:**
+- ✅ Search no longer throws Pydantic validation error
+- ✅ Transcript segments successfully returned in search results
+- ✅ Video citations show with actual URLs (when LLM follows instructions correctly)
+- ✅ Regular Q&A citations show as `[Source N](internal)`
+- ⚠️ Note: LLM sometimes uses placeholder text "video_url" instead of actual URL - may need further prompt engineering
+
+**Current Status:**
+- Search functionality working for both Q&A and transcript segments
+- Citation format improved but may need refinement based on LLM adherence
+- No timeout issues - reverted to simple approach without extra database queries
+
+**Lessons Learned:**
+- Additional database queries in the hot path cause significant latency
+- Async functions must properly close docstrings with triple quotes
+- Frontend axios has 30-second timeout by default
+- Better to use existing data than fetch additional hierarchy names
+
+**Next Steps:**
+- Monitor LLM citation quality in production use
+- Consider adding course/module/lesson names to transcript segment names at upload time
+- Test full workflow with real student questions
+- Apply database migration: `004_add_whisper_extracted_by.sql`
+
+**Session end:** December 30, 2025

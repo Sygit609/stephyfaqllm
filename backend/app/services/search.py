@@ -84,7 +84,7 @@ async def vector_search(
 
         # Build query with optional course filter
         query = db.table("knowledge_items").select(
-            "id, question_raw, question_enriched, answer, category, tags, "
+            "id, question, question_raw, question_enriched, answer, category, tags, "
             f"date, source_url, {embedding_column}, content_type, "
             "media_url, timecode_start, timecode_end, course_id, module_id, lesson_id"
         )
@@ -121,10 +121,10 @@ async def vector_search(
 
                 result = {
                     "id": item["id"],
-                    "question": item["question_enriched"] or item["question_raw"],
+                    "question": item["question_enriched"] or item["question_raw"] or item.get("question", ""),
                     "answer": item["answer"],
                     "category": item.get("category"),
-                    "tags": item.get("tags", []),
+                    "tags": item.get("tags") or [],
                     "date": item.get("date"),
                     "source_url": item.get("source_url"),
                     "score": float(score),
@@ -164,7 +164,7 @@ async def fulltext_search(query: str, limit: int = 5, course_id: str = None) -> 
         # Use keyword search with ilike (case-insensitive pattern matching)
         # For MVP, this is simpler than full postgres ts_search
         query_builder = db.table("knowledge_items").select(
-            "id, question_raw, question_enriched, answer, category, tags, "
+            "id, question, question_raw, question_enriched, answer, category, tags, "
             "date, source_url, content_type, media_url, timecode_start, "
             "timecode_end, course_id, module_id, lesson_id"
         ).or_(
@@ -183,10 +183,10 @@ async def fulltext_search(query: str, limit: int = 5, course_id: str = None) -> 
             score = 1.0 - (idx * 0.1)  # Simple scoring
             results.append({
                 "id": item["id"],
-                "question": item["question_enriched"] or item["question_raw"],
+                "question": item["question_enriched"] or item["question_raw"] or item.get("question", ""),
                 "answer": item["answer"],
                 "category": item.get("category"),
-                "tags": item.get("tags", []),
+                "tags": item.get("tags") or [],
                 "date": item.get("date"),
                 "source_url": item.get("source_url"),
                 "score": max(0.1, score),  # Min score 0.1
