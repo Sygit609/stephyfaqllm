@@ -1293,3 +1293,151 @@ Modified `backend/app/services/generation.py` (lines 150-173) to be more explici
   - Different prompting strategy or model parameters
 
 **Session end:** December 31, 2025
+
+---
+## 2025-12-31 (Admin-Guided Search Implementation - Phase 1 Complete)
+**Context:** This session implements the first phase of post classification and admin review workflow from the idea_list.txt requirements. The focus is on adding an optional "Admin Input" field that allows coaches to provide guidance to influence LLM answer generation, with support for iterative refinement.
+
+**User Requirements (from idea_list.txt):**
+- Allow admin to provide optional guidance/thoughts alongside student's question
+- LLM combines admin guidance + KB sources → curated answer
+- Support iterative refinement: admin can adjust guidance and regenerate
+- UI state machine: "Initial" → "Answer" states
+- "New Question" button to reset for next student
+- Student question becomes read-only after first search
+- Admin input stays editable throughout refinement
+
+**Implementation Summary:**
+
+### Phase 1: Admin-Guided Search (Completed)
+
+**Backend Changes (3 files):**
+
+1. **`backend/app/models/schemas.py`** (line 91-95)
+   - Added `admin_input: Optional[str]` field to `QueryRequest`
+   - Backward compatible (optional parameter)
+
+2. **`backend/app/services/generation.py`** (lines 10-27, 152, 172, 210, 266)
+   - Created `build_admin_guidance_section()` helper function
+   - Updated all 3 generation functions to accept `admin_input` parameter:
+     - `generate_grounded_answer()`
+     - `generate_with_web_sources()`
+     - `generate_hybrid_answer()`
+   - Injected admin guidance into system prompts with clear instructions
+   - System prompt integrates admin guidance while maintaining citation accuracy
+
+3. **`backend/app/api/endpoints.py`** (line 168, 195, 202, 209)
+   - Extracted `admin_input` from request
+   - Threaded through all three generation paths
+
+**Frontend Changes (2 files):**
+
+1. **`frontend/lib/api/types.ts`** (line 78)
+   - Added `admin_input?: string` to `QueryRequest` interface
+
+2. **`frontend/components/search/SearchInterface.tsx`** (complete refactor)
+   - Implemented state machine pattern: `"initial" | "answer"` states
+   - Added state variables:
+     - `adminInput` - stores admin guidance text
+     - `searchState` - controls UI behavior
+   - Created handlers:
+     - `handleSubmit()` - initial search, transitions to "answer" state
+     - `handleRefineAnswer()` - regenerates with updated admin input
+     - `handleNewQuestion()` - resets everything to "initial" state
+   - UI changes:
+     - Student question: textarea (initial) → read-only div (answer)
+     - Admin input: always editable textarea
+     - Model selector: hidden in answer state
+     - Buttons: "Search" (initial) vs "Refine Answer" + "New Question" (answer)
+
+**UI Improvements (User Feedback):**
+
+Modified **`frontend/components/search/AnswerDisplay.tsx`**:
+1. **Removed repeated question** from Answer header (user said "not necessary")
+2. **Added Copy button** in upper right corner with clipboard API
+   - Shows "Copied!" feedback for 2 seconds
+   - Uses `navigator.clipboard.writeText(answer)`
+3. **Wrapped answer in copyable block** - bordered white box for better visual separation
+
+**System Prompt Improvements (User Feedback):**
+
+Updated citation formatting rules in `generation.py`:
+1. **Removed bold formatting** - Changed citation format from `**[Source N](internal)**` to `[Source N](internal)`
+   - User said: "could you make sure it wont include **, they are quite annoying"
+2. **Removed em dashes** - Added rule to avoid em dashes (—)
+   - User said: "also remove '—', it's very ai-ish"
+   - Added: "DO NOT use em dashes (—) or fancy punctuation - use simple hyphens (-) or commas instead"
+   - Added: "Write in a natural, human-friendly way - avoid AI-sounding phrases"
+
+**Testing & Deployment:**
+
+1. **Backend Testing:**
+   - Tested with curl - admin input successfully influences answers
+   - Backward compatibility confirmed (works without admin input)
+   - FastAPI auto-reload working correctly
+
+2. **Frontend Issue Resolved:**
+   - Initial deployment: UI loading indefinitely
+   - Root cause: Next.js dev server frozen at 99% CPU (process running since Tuesday)
+   - Fix: Killed frozen processes, restarted frontend on port 3002
+   - User confirmed: "it's working really well"
+
+3. **User Acceptance:**
+   - User tested iterative refinement workflow
+   - Confirmed all UI improvements
+   - No outstanding issues reported
+
+**Files Touched:**
+- `backend/app/models/schemas.py` - Schema updates
+- `backend/app/services/generation.py` - Admin guidance injection + prompt improvements
+- `backend/app/api/endpoints.py` - Parameter threading
+- `frontend/lib/api/types.ts` - Type definitions
+- `frontend/components/search/SearchInterface.tsx` - Complete refactor with state machine
+- `frontend/components/search/AnswerDisplay.tsx` - UI improvements (copy button, removed question)
+
+**Git Actions:**
+- ✅ All changes committed and pushed throughout session
+- 📝 Updating claude-history.md with complete session summary
+
+**Architecture Decisions:**
+
+1. **Stateless Refinement:** Each query is independent, no conversation history tracking
+   - Simpler implementation, easier to reason about
+   - Admin input is explicitly provided each time
+   - Future enhancement: could add conversation history if needed
+
+2. **System Prompt Injection:** Admin guidance inserted into prompt rather than separate API parameter
+   - Maintains single LLM call architecture
+   - Clear instruction to LLM about balancing guidance with accuracy
+   - Works across all three generation paths (grounded, web, hybrid)
+
+3. **State Machine Pattern:** Clean separation of "initial" vs "answer" states
+   - Controls which fields are editable
+   - Controls which buttons are visible
+   - Easy to extend for future states (e.g., "classification review")
+
+**Success Criteria (All Met):**
+- ✅ Admin can provide optional guidance that influences answer tone/focus
+- ✅ Admin can iteratively refine answers by adjusting guidance
+- ✅ Student question preserved during refinement (read-only)
+- ✅ Sources remain visible throughout refinement
+- ✅ "New Question" button resets interface for next student
+- ✅ Backward compatible (works without admin input)
+- ✅ No breaking changes to existing functionality
+- ✅ Copy button for easy answer copying
+- ✅ Clean UI without repeated elements
+- ✅ Natural formatting (no **, no em dashes)
+
+**Future Enhancements (Phase 2+):**
+From idea_list.txt and user requirements:
+- **Phase 2:** Question classification (course content, technical, celebration, support)
+- **Phase 3:** Multi-agent routing for posts with multiple question types
+- **Phase 4:** Advanced features (conversation history, side-by-side comparison, templates)
+
+**Current Status:**
+- Phase 1 complete and deployed
+- All user-requested improvements implemented
+- System ready for production use by OIL staff
+- Architecture supports future enhancements
+
+**Session end:** December 31, 2025
