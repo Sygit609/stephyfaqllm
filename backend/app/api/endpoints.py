@@ -875,7 +875,8 @@ async def upload_transcript(lesson_id: str, file: UploadFile = File(...)):
         folder_name = folder_data.get("question", "")
         video_url = folder_data.get("media_url", "")
 
-        # Get course_id by traversing up the tree to hierarchy_level 1
+        # Get course_id and video_url by traversing up the tree
+        # Video URL might be on parent folder if not set on current folder
         course_id = None
         parent_id = folder_data.get("parent_id")
         current_level = folder_data.get("hierarchy_level", 1)
@@ -884,12 +885,17 @@ async def upload_transcript(lesson_id: str, file: UploadFile = File(...)):
         if current_level == 1:
             course_id = lesson_id
         else:
-            # Traverse up to find course (level 1)
+            # Traverse up to find course (level 1) and video_url if not set
             while parent_id and current_level > 1:
                 parent_result = db.table("knowledge_items").select("*").eq("id", parent_id).single().execute()
                 if parent_result.data:
                     parent_data = parent_result.data
                     current_level = parent_data.get("hierarchy_level", 1)
+
+                    # If video_url not set yet and parent has it, use parent's URL
+                    if not video_url and parent_data.get("media_url"):
+                        video_url = parent_data.get("media_url")
+
                     if current_level == 1:
                         course_id = parent_id
                         break
