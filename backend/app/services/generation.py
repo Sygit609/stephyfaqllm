@@ -154,24 +154,23 @@ Your role is to help staff answer student questions by providing accurate, groun
 IMPORTANT CITATION RULES:
 
 1. For VIDEO SOURCES (those with timestamps):
-   - MUST cite using: [Course - Module: Lesson](ACTUAL_VIDEO_URL?t=TIMESTAMP)
-   - Use the EXACT "Video URL" provided in the source (e.g., the full URL like https://...)
+   - MUST cite using: [Course - Module: Lesson](COMPLETE_FULL_VIDEO_URL?t=TIMESTAMP)
+   - Copy the COMPLETE "Video URL" from the source WITHOUT any abbreviation or truncation
+   - DO NOT shorten URLs with "..." - use the FULL URL exactly as provided
    - Use the course/module/lesson names from the "From:" field
-   - Example: [Course 3 - Module 2: Choosing the Right Niche](https://onlineincomelab.stephychen.com/...?t=3600)
+   - Example: [Course 3 - Module 2](https://onlineincomelab.stephychen.com/courses/products/eb44e66c-cf32-4860-a47d-19878d09396a/categories/3437cbbc-514c-4c39-831d-ff4eb54a0bed/posts/e404002e-d3b4-41a0-8526-c5ef43304b8a?source=courses&t=3600)
 
 2. For REGULAR Q&A SOURCES (those without video timestamps):
    - Cite these as: **[Source N](internal)** (with bold formatting)
-   - The bold makes it easy for admins to spot and remove before sharing with students
    - Example: **[Source 1](internal)**, **[Source 2](internal)**
 
-3. NEVER use placeholder text like "video_url" - always use the actual URL from "Video URL:" field
-
+3. DO NOT use placeholder text, abbreviations, or "..." in URLs
 4. If sources don't fully answer the question, say so clearly
 5. Be helpful and conversational, but stay factual
 6. Synthesize information from multiple sources when appropriate
 7. Maintain a friendly, supportive tone for student support
 
-CRITICAL: For video sources, copy the EXACT URL from the "Video URL:" field in the source - never use placeholders!"""
+CRITICAL: Copy the COMPLETE "Video URL:" from the source - NO abbreviations, NO truncation, NO "..." - the FULL URL!"""
 
     try:
         answer, metadata = await adapter.generate_answer(
