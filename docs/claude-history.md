@@ -1441,3 +1441,82 @@ From idea_list.txt and user requirements:
 - Architecture supports future enhancements
 
 **Session end:** December 31, 2025
+
+---
+## 2025-12-31 (Feature Prioritization Discussion)
+**Context:** User shared their ideas list and requested prioritization advice for the next phase of development.
+
+**User's Ideas (from idea_list.txt):**
+1. Screenshot function (copy paste, not download upload)
+2. Side panel for LLM FAQ tool to paste questions in or fish answer out conveniently
+3. Time-sensitive info UI/UX (zoom dates, times, links) with Google Calendar integration
+4. Text-based FB post import (Question + optional Answer + Link) instead of screenshot
+5. Import content menu reorganization for multiple content types:
+   - Course transcripts
+   - Facebook group posts
+   - Calendar (event dates, zoom links)
+   - Other (future: business books for enriched replies)
+
+**User's Insight:**
+User recognized that their competitive moat is the course creator's content library. Fast import = faster integration of LLM into their workflow.
+
+**Prioritization Recommendation:**
+
+### High Priority (Do Next)
+1. **Side panel for Q&A access** ⭐ **RECOMMENDED FIRST**
+   - Rationale: User's moat hypothesis - fast access to answers = competitive advantage
+   - Quick win: ~2-3 hours, frontend-only work
+   - Immediate value: Coaches work faster TODAY
+   - Features:
+     - Quick search input
+     - Recent queries history (localStorage)
+     - One-click copy to clipboard
+     - Keyboard shortcut (Cmd+K)
+     - "Open in main view" link
+   - No backend changes required
+   - Sets foundation for future "Quick add" features
+
+2. **Text-based FB post import**
+   - Why second: Complements existing screenshot import
+   - Impact: Faster content ingestion for simple text posts
+   - Form: Question (required) + Answer (optional) + Source URL + Tags
+   - Benefit: FB mobile users can paste easily, screenshots are overkill for text
+
+### Medium Priority (Next Phase)
+3. **Screenshot paste** (clipboard API)
+   - Current upload works, this is UX polish
+   - Slight workflow improvement
+
+4. **Import content menu reorganization**
+   - Needed as content types grow
+   - Suggested: Tabbed interface:
+     - Tab 1: Facebook Posts (screenshot OR text)
+     - Tab 2: Course Transcripts
+     - Tab 3: Calendar Events
+     - Tab 4: External Resources
+
+### Lower Priority (Future)
+5. **Calendar/Zoom integration**
+   - More complex, third-party integration required
+   - Consideration: Time-sensitive data has TTL issues
+   - Suggested: Add `expires_at` field when implemented
+
+6. **Business books / external resources**
+   - Nice-to-have, not urgent
+   - Can reuse existing Q&A ingestion patterns
+
+**Alternative Consideration:**
+If current bottleneck is getting content INTO the system (not OUT), flip priority:
+1. Text-based import first
+2. Side panel second
+
+**Decision Point for User:**
+- "I wish I could find answers faster" → Side panel first
+- "I wish I could add content faster" → Text import first
+
+User leaned toward side panel based on "moat" insight about making tool indispensable for daily use.
+
+**Next Steps:**
+User decided to call it a day. Side panel implementation awaits user's go-ahead for next session.
+
+**Session end:** December 31, 2025
