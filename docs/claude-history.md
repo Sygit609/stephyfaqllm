@@ -1520,3 +1520,240 @@ User leaned toward side panel based on "moat" insight about making tool indispen
 User decided to call it a day. Side panel implementation awaits user's go-ahead for next session.
 
 **Session end:** December 31, 2025
+
+---
+## 2026-01-01 (Facebook Thread Parser Implementation - Complete)
+**Context:** Continuing from December 31st session. User approved the text-based content import feature plan and I implemented the Facebook Thread Parser as the 3rd import method.
+
+**Problem Statement:**
+User needed a way to import entire Facebook threads (main post + all comments) more efficiently than manually copying Q&As one by one. The goal was to use AI to parse threads, extract Q&A pairs, classify content as "meaningful" vs "filler", and auto-generate tags.
+
+**Implementation Summary:**
+
+### Phase 1: Backend Implementation (Completed)
+
+**1. Database Schemas Added** (`backend/app/models/schemas.py` lines 341-369):
+- `ParseThreadRequest`: Accepts thread_text, source_url, provider
+- `ParsedQAPair`: Contains question, answer, classification, confidence, reasoning, tags, parent_index, depth
+- `ParseThreadResponse`: Returns qa_pairs list + statistics
+
+**2. Thread Parser Service** (`backend/app/services/thread_parser.py` - 258 lines):
+- Comprehensive system prompt with classification rules (lines 12-79)
+- `parse_facebook_thread()` function using LLM to extract Q&A pairs
+- Multiple JSON parsing fallback strategies (4 strategies for robustness)
+- Validation function `validate_parsed_qa()`
+- Hierarchy preservation via parent_index and depth fields
+- **Key prompt instruction**: "Be generous with 'meaningful' classification" (line 73)
+
+**3. LLM Adapters Enhancement** (`backend/app/services/llm_adapters.py`):
+- Added `max_tokens` parameter to abstract method (line 30)
+- OpenAI adapter now accepts `max_tokens` (lines 82-98)
+- Gemini adapter supports `max_tokens` via GenerationConfig (lines 254-271)
+
+**4. API Endpoint** (`backend/app/api/endpoints.py` lines 525-564):
+- `POST /api/admin/parse-thread` endpoint
+- Validates parsed Q&As before returning
+- Returns statistics (total, meaningful count, filler count)
+
+### Phase 2: Frontend Implementation (Completed)
+
+**5. TypeScript Types** (`frontend/lib/api/types.ts` lines 308-338):
+- `ParseThreadRequest`, `ParsedQAPair`, `ParseThreadResponse` interfaces
+- Matches backend Pydantic schemas exactly
+
+**6. API Client** (`frontend/lib/api/admin.ts` lines 89-97):
+- `parseThread()` function wrapping axios POST call
+
+**7. ThreadParserImporter Component** (`frontend/components/admin/ThreadParserImporter.tsx` - 162 lines):
+- Facebook URL input with validation
+- Large textarea for thread paste (min 100 characters)
+- Loading state during parsing
+- Character counter
+- Error handling with user-friendly messages
+
+**8. ThreadParserPreview Component** (`frontend/components/admin/ThreadParserPreview.tsx` - 357 lines):
+- Color-coded Q&A cards:
+  - Green border/background: Meaningful (classification = "meaningful")
+  - Red border/background: Filler (classification = "filler")
+  - Yellow border/background: Uncertain (confidence < 0.7)
+- Hierarchical indentation based on depth level
+- Stats summary (total parsed, meaningful, filler, uncertain counts)
+- Filter dropdown (all, meaningful only, filler only, uncertain)
+- Bulk selection controls:
+  - "Select all" - checks all items for saving
+  - "Deselect all filler" - unchecks filler items
+  - "Deselect all" - unchecks everything
+- **Checkbox logic**: checked = save, unchecked = delete (user-requested UX fix)
+- Inline editing (question, answer, tags)
+- Individual select checkboxes per Q&A
+- Classification badges with confidence percentages
+- AI reasoning display
+- Tag management (add/remove tags per Q&A)
+- Save button shows count of selected items
+
+**9. Import Page Integration** (`frontend/app/admin/import/page.tsx`):
+- Added "thread-parser" to ImportMethod type
+- Added 3rd import method button: "🧵 Thread Parser"
+- State management for thread parser data
+- Conditional rendering based on import method
+- Workflow: ThreadParserImporter → ThreadParserPreview → SaveConfirmation
+
+### Bug Fixes Throughout Implementation
+
+**Bug 1: Database Constraint Violation**
+- Error: `extracted_by` value 'ai-thread-parser' violated CHECK constraint
+- Fix: Changed to "manual" (allowed value), preserved thread parser info in `raw_extraction.import_method` field
+- File: ThreadParserPreview.tsx line 125
+
+**Bug 2: Counter-Intuitive Checkbox UX**
+- User feedback: "checked items seem like they won't be saved, a bit counter intuitive"
+- Fix: Inverted all checkbox logic (checked = save, unchecked = delete)
+- Files: ThreadParserPreview.tsx (lines 33, 65, 107, 132, 212-229, 242, 319-328, 341-347)
+
+**Bug 3: JSON Truncation**
+- Error: `Unterminated string starting at: line 24 column 7 (char 2134)`
+- Root cause: max_tokens was only 500, response was truncated mid-JSON
+- Fix: Increased to 4000 tokens in thread_parser.py line 124
+- Also made max_tokens configurable in both OpenAI and Gemini adapters
+
+### Phase 3: Video Timestamp URL Fix (Completed)
+
+**Issue Reported:**
+User found search results showing broken video URLs with double question marks:
+```
+https://...?source=courses?t=3600
+```
+
+**User Clarification:**
+- "there shouldn't be t=3600 at all, it's not the correct time stamp"
+- "when sharing the link, just share the link without extra stuff, just the link purely"
+- "DO NOT include t=xxx with the link, cus it wont redirect anywhere right"
+
+**Root Cause:**
+Code was appending timestamp parameters to URLs that already had query strings, and the video player doesn't support timestamp parameters anyway.
+
+**Fix Applied** (`backend/app/services/generation.py`):
+
+1. **Removed timestamp URL construction** (lines 42-55):
+   - Deleted code that built clickable_url with ?t= or &t= parameter
+   - Now returns clean video URL + timestamp as separate display info
+
+2. **Fixed format_sources_for_prompt** (lines 86-92):
+   - Removed video_url_with_timestamp construction
+   - Provides clean URL to LLM in context
+
+3. **Updated system prompt** (lines 178-205):
+   - Added explicit instruction: "DO NOT add timestamp parameters (?t= or &t=) to the URL"
+   - Changed citation format from `[Title](URL?t=3600)` to `[Title](URL) at 01:00`
+   - Added example showing correct format with timestamp as separate text
+   - Emphasized: "Copy the COMPLETE 'Video URL' from the source WITHOUT any abbreviation or truncation"
+
+**Result:**
+- Video URLs now shared cleanly without timestamp parameters
+- Timestamps displayed separately as "at MM:SS" or "Timestamp: MM:SS"
+- Full URL preserved for copying/sharing
+
+### Testing Results
+
+**Thread Parser:**
+- ✅ Can paste full Facebook threads (main post + comments)
+- ✅ AI successfully parses and extracts Q&A pairs
+- ✅ Classification works (meaningful vs filler)
+- ✅ Confidence scores calculated correctly
+- ✅ Tags auto-generated for meaningful content
+- ✅ Hierarchy preserved (parent_index, depth)
+- ✅ Color-coded preview displays correctly
+- ✅ Bulk selection controls work
+- ✅ Inline editing functional
+- ✅ Save workflow completes successfully
+- ✅ Dual embeddings generated for saved Q&As
+
+**Video Citations:**
+- ✅ URLs no longer have timestamp parameters
+- ✅ Timestamps shown separately as text
+- ✅ Full URLs preserved for copying
+- ✅ Course transcript search returns clean URLs
+
+### Architecture Decisions
+
+1. **Checkbox UX**: Checked = save (user-requested inversion from original design)
+2. **Default to "meaningful"**: When uncertain, classify as meaningful (conservative approach)
+3. **extracted_by workaround**: Use "manual" to satisfy DB constraint, preserve parser info in metadata
+4. **max_tokens configurable**: Both adapters support variable output length
+5. **Multiple JSON parsing strategies**: 4 fallback strategies for robustness
+6. **Timestamp separation**: URLs and timestamps kept separate (no URL parameters)
+
+### Files Created (6 new files)
+- `backend/app/services/thread_parser.py` (258 lines)
+- `frontend/components/admin/ThreadParserImporter.tsx` (162 lines)
+- `frontend/components/admin/ThreadParserPreview.tsx` (357 lines)
+- `frontend/components/admin/TextImporter.tsx` (created but not shown in git status)
+- `frontend/components/admin/TextImportPreview.tsx` (created but not shown in git status)
+- `docs/idea_list.txt` (user's feature ideas)
+
+### Files Modified (13 files)
+- `backend/app/api/endpoints.py` (added parse-thread endpoint)
+- `backend/app/models/schemas.py` (added 3 thread parser schemas)
+- `backend/app/services/content_manager.py` (minor updates)
+- `backend/app/services/generation.py` (video timestamp URL fix)
+- `backend/app/services/llm_adapters.py` (max_tokens parameter)
+- `frontend/app/admin/courses/[courseId]/page.tsx`
+- `frontend/app/admin/import/page.tsx` (integrated thread parser as 3rd method)
+- `frontend/components/courses/FolderTreeNode.tsx`
+- `frontend/components/courses/GoogleDocsTabsView.tsx`
+- `frontend/components/search/AnswerDisplay.tsx`
+- `frontend/components/search/SearchInterface.tsx`
+- `frontend/lib/api/admin.ts` (added parseThread function)
+- `frontend/lib/api/types.ts` (added thread parser types)
+
+### Cost & Performance
+
+**Thread Parsing Cost:**
+- ~$0.03-0.05 per 20-comment thread (GPT-4o)
+- Input: ~2,800 tokens, Output: ~1,500 tokens
+- Comparable to screenshot processing cost
+
+**Speed:**
+- Parsing: 3-5 seconds
+- Total workflow: ~6-8 seconds
+- **60-120x faster than manual** (5-10 min manual vs 6-8 sec AI)
+
+### User Feedback
+
+**After thread parser implementation:**
+User: "i actually like this design, one very minor thing is the check list box, should be checked by default (meaning which ever items check will be save, currently i seems like checked items will not be saved, a bit counter intuitive)"
+→ Fixed by inverting checkbox logic
+
+**After video timestamp fix:**
+User: "so far so good, save my work, update claude-history.md, and push to my github account"
+→ Proceeding with commit and push
+
+### Success Criteria (All Met)
+
+- ✅ 3rd import method added (Screenshot, Text/Paste, Thread Parser)
+- ✅ AI parses full Facebook threads
+- ✅ Classifies content as meaningful/filler/uncertain
+- ✅ Auto-generates tags for meaningful content
+- ✅ Preserves hierarchy (parent_index, depth)
+- ✅ Color-coded preview UI
+- ✅ Bulk selection and filtering
+- ✅ Inline editing before save
+- ✅ Checkbox UX matches user expectations
+- ✅ Video URLs clean without timestamp parameters
+- ✅ Timestamps shown separately as reference
+- ✅ 60-120x faster than manual import
+- ✅ Dual embeddings generated
+- ✅ No breaking changes to existing features
+
+### Current Status
+
+**Both servers running:**
+- Backend: http://localhost:8001
+- Frontend: http://localhost:3002
+
+**Ready for:**
+- ✅ Git commit with descriptive message
+- ✅ Update to claude-history.md
+- ✅ Push to GitHub
+
+**Session end:** January 1, 2026
