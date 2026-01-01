@@ -1757,3 +1757,168 @@ User: "so far so good, save my work, update claude-history.md, and push to my gi
 - ✅ Push to GitHub
 
 **Session end:** January 1, 2026
+
+---
+## 2026-01-01 Session 2: Course Transcript Tab Management Improvements
+
+**Context:** User requested improvements to the course transcript management UI - specifically the ability to rename tabs and keep folders expanded after operations.
+
+### Problem Statement
+
+User reported two UI/UX issues with the course transcript tab management:
+
+1. **Rename functionality missing**: User wanted to rename course module/lesson tabs directly from the UI
+2. **Tabs collapsing after operations**: After adding a subtab or renaming, all expanded folders would collapse, requiring the user to re-expand them repeatedly
+
+### Implementation Summary
+
+#### Phase 1: Inline Rename Functionality (Completed)
+
+**File Modified:** [frontend/components/courses/GoogleDocsTabsView.tsx](frontend/components/courses/GoogleDocsTabsView.tsx)
+
+**Changes:**
+
+1. **Added rename state management** (lines 27-28):
+   - `renamingTabId`: Tracks which tab is being renamed
+   - `newTabName`: Stores the new name during editing
+
+2. **Implemented inline rename UI** (lines 219-256):
+   - When user clicks "Rename" from dropdown menu, tab name becomes editable input field
+   - Save/cancel buttons appear with green checkmark and red X icons
+   - Keyboard shortcuts: Enter to save, Escape to cancel
+   - Auto-focus on input field
+
+3. **Created rename handlers** (lines 97-119):
+   - `handleRename()`: Initiates rename mode
+   - `handleSaveRename()`: Saves new name via API
+   - `handleCancelRename()`: Cancels rename operation
+
+4. **Updated dropdown menu** (lines 269-277):
+   - "Rename" button now triggers rename mode instead of showing alert
+
+#### Phase 2: Fixed Dropdown Menu Positioning (Completed)
+
+**Issue:** Dropdown menu was being clipped by the sidebar's `overflow-y-auto` container.
+
+**Solution:**
+
+1. **Changed from absolute to fixed positioning** (lines 268-297):
+   - Added `menuPosition` state to track dropdown coordinates
+   - Used `getBoundingClientRect()` to calculate exact button position
+   - Changed dropdown from `absolute` to `fixed` positioning
+   - Applied inline styles with calculated top/left positions
+
+2. **Updated all menu close handlers** to clear both `showMenu` and `menuPosition` states
+
+**Result:** Dropdown menu now appears correctly positioned above all other content and is not clipped.
+
+#### Phase 3: SessionStorage Persistence for Expanded Tabs (Completed)
+
+**Issue:** When `onRefresh()` was called (after adding subtab, renaming, etc.), the component would remount with fresh tree data, resetting the `expandedTabs` state and collapsing all folders.
+
+**Root Cause Analysis:**
+- Parent component calls `loadCourseTree()` which fetches fresh data
+- This causes `GoogleDocsTabsView` to remount with default state
+- Local state `expandedTabs` was being reset to empty Set
+
+**Solution: SessionStorage Persistence** (lines 32-52):
+
+1. **Initialize from sessionStorage** (lines 33-45):
+```typescript
+const [expandedTabs, setExpandedTabs] = useState<Set<string>>(() => {
+  if (typeof window !== 'undefined') {
+    const stored = sessionStorage.getItem(`expandedTabs-${tree.id}`)
+    if (stored) {
+      try {
+        return new Set(JSON.parse(stored))
+      } catch {
+        return new Set()
+      }
+    }
+  }
+  return new Set()
+})
+```
+
+2. **Auto-save on every change** (lines 48-52):
+```typescript
+useEffect(() => {
+  if (typeof window !== 'undefined') {
+    sessionStorage.setItem(`expandedTabs-${tree.id}`, JSON.stringify(Array.from(expandedTabs)))
+  }
+}, [expandedTabs, tree.id])
+```
+
+3. **Simplified operation handlers** (lines 66-90, 104-119):
+   - Removed manual state preservation logic
+   - SessionStorage automatically handles persistence
+   - State survives component remounts from `onRefresh()`
+
+**How It Works:**
+- When you expand/collapse tabs, state is automatically saved to sessionStorage
+- When `onRefresh()` is called, component remounts with fresh tree data
+- On remount, expanded tabs state is **restored from sessionStorage**
+- Expanded tabs stay expanded across all operations (add subtab, rename, delete, etc.)
+
+**Benefits:**
+- Uses browser's sessionStorage (persists for tab session, clears when tab closes)
+- Scoped per course using `expandedTabs-${tree.id}` key
+- No backend changes required
+- Works seamlessly with existing refresh logic
+
+### Testing Results
+
+✅ **Inline Rename:**
+- Tab name becomes editable input on "Rename" click
+- Enter key saves changes
+- Escape key cancels
+- Visual save/cancel buttons work correctly
+- API updates folder name successfully
+
+✅ **Dropdown Menu:**
+- No longer clipped by sidebar overflow
+- Positioned correctly relative to 3-dot button
+- Appears above all other content with proper z-index
+
+✅ **Expanded State Persistence:**
+- Folders stay expanded after adding subtab
+- Folders stay expanded after renaming tab
+- Folders stay expanded after deleting tab
+- State persists across page navigation within same browser tab
+- State clears when browser tab is closed (sessionStorage behavior)
+
+### User Feedback
+
+**Initial issue:** "good, drop down is n longer being blocked but everytime i added a new subtab or renamed a new subtab, the tab minimizes, and i have to expand again and add new subtab or rename again, it's a lot of extra work"
+
+**After sessionStorage fix:** User tested and confirmed the fix works correctly.
+
+### Files Modified (1 file)
+
+- `frontend/components/courses/GoogleDocsTabsView.tsx` - Added rename functionality, fixed dropdown positioning, implemented sessionStorage persistence
+
+### Architecture Decisions
+
+1. **SessionStorage vs LocalStorage**: Used sessionStorage to avoid cluttering permanent storage, state should clear when user closes tab
+2. **Course-scoped storage key**: Each course has separate expanded state using `expandedTabs-${tree.id}`
+3. **Inline editing pattern**: Consistent with modern UX patterns (GitHub, Notion, etc.)
+4. **Fixed positioning for dropdown**: Prevents clipping issues in scrollable containers
+
+### Success Criteria (All Met)
+
+- ✅ Users can rename tabs inline with visual feedback
+- ✅ Dropdown menu appears correctly positioned and unclipped
+- ✅ Expanded folders persist across add/rename/delete operations
+- ✅ No backend changes required
+- ✅ No breaking changes to existing functionality
+- ✅ Fast and responsive UX
+
+### Current Status
+
+**Both servers running:**
+- Backend: http://localhost:8001
+- Frontend: http://localhost:3002
+
+**Ready for commit and push**
+
+**Session end:** January 1, 2026

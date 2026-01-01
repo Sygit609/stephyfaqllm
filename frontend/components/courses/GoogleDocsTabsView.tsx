@@ -17,7 +17,6 @@ interface Props {
 
 export default function GoogleDocsTabsView({ tree, onRefresh, onCreateModule }: Props) {
   const [selectedTab, setSelectedTab] = useState<string | null>(null)
-  const [expandedTabs, setExpandedTabs] = useState<Set<string>>(new Set())
   const [showMenu, setShowMenu] = useState<string | null>(null)
   const [isUploading, setIsUploading] = useState(false)
   const [uploadError, setUploadError] = useState<string | null>(null)
@@ -25,7 +24,32 @@ export default function GoogleDocsTabsView({ tree, onRefresh, onCreateModule }: 
   const [isEditingMetadata, setIsEditingMetadata] = useState(false)
   const [videoUrl, setVideoUrl] = useState("")
   const [description, setDescription] = useState("")
+  const [renamingTabId, setRenamingTabId] = useState<string | null>(null)
+  const [newTabName, setNewTabName] = useState("")
+  const [menuPosition, setMenuPosition] = useState<{ top: number; left: number } | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  // Persist expanded tabs across refreshes using sessionStorage
+  const [expandedTabs, setExpandedTabs] = useState<Set<string>>(() => {
+    if (typeof window !== 'undefined') {
+      const stored = sessionStorage.getItem(`expandedTabs-${tree.id}`)
+      if (stored) {
+        try {
+          return new Set(JSON.parse(stored))
+        } catch {
+          return new Set()
+        }
+      }
+    }
+    return new Set()
+  })
+
+  // Save expanded tabs to sessionStorage whenever it changes
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      sessionStorage.setItem(`expandedTabs-${tree.id}`, JSON.stringify(Array.from(expandedTabs)))
+    }
+  }, [expandedTabs, tree.id])
 
   // Load metadata when tab is selected
   useEffect(() => {
@@ -49,11 +73,20 @@ export default function GoogleDocsTabsView({ tree, onRefresh, onCreateModule }: 
         description: "",
         thumbnail_url: null
       })
-      onRefresh()
+
+      // Ensure parent stays expanded (sessionStorage will persist it)
+      setExpandedTabs(prev => {
+        const next = new Set(prev)
+        next.add(parentId)
+        return next
+      })
+
+      await onRefresh()
     } catch (err: any) {
       alert(err.message || "Failed to create subtab")
     }
     setShowMenu(null)
+    setMenuPosition(null)
   }
 
   const handleDelete = async (folderId: string) => {
@@ -66,6 +99,7 @@ export default function GoogleDocsTabsView({ tree, onRefresh, onCreateModule }: 
       alert("Failed to delete")
     }
     setShowMenu(null)
+    setMenuPosition(null)
   }
 
   const handleDeleteTranscript = async (segmentId: string) => {
@@ -94,9 +128,39 @@ export default function GoogleDocsTabsView({ tree, onRefresh, onCreateModule }: 
     }
   }
 
+  const handleRename = (folderId: string, currentName: string) => {
+    setRenamingTabId(folderId)
+    setNewTabName(currentName)
+    setShowMenu(null)
+    setMenuPosition(null)
+  }
+
+  const handleSaveRename = async () => {
+    if (!renamingTabId || !newTabName.trim()) return
+
+    try {
+      await updateFolder(renamingTabId, {
+        name: newTabName.trim()
+      })
+
+      setRenamingTabId(null)
+      setNewTabName("")
+      await onRefresh()
+      // sessionStorage automatically persists expanded state
+    } catch (err) {
+      alert("Failed to rename tab")
+    }
+  }
+
+  const handleCancelRename = () => {
+    setRenamingTabId(null)
+    setNewTabName("")
+  }
+
   const handleUpload = (folderId: string) => {
     setCurrentUploadFolderId(folderId)
     setShowMenu(null)
+    setMenuPosition(null)
     fileInputRef.current?.click()
   }
 
@@ -210,20 +274,67 @@ export default function GoogleDocsTabsView({ tree, onRefresh, onCreateModule }: 
           {!hasChildren && <div className="w-4" />}
 
           {/* Tab Icon */}
-          <div onClick={() => setSelectedTab(node.id)} className="flex items-center gap-2 flex-1 cursor-pointer">
+          <div onClick={() => !renamingTabId && setSelectedTab(node.id)} className="flex items-center gap-2 flex-1 cursor-pointer">
             <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
             </svg>
 
-            {/* Tab Name */}
-            <span className="flex-1">{node.name}</span>
+            {/* Tab Name or Rename Input */}
+            {renamingTabId === node.id ? (
+              <div className="flex-1 flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                <input
+                  type="text"
+                  value={newTabName}
+                  onChange={(e) => setNewTabName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      handleSaveRename()
+                    } else if (e.key === 'Escape') {
+                      handleCancelRename()
+                    }
+                  }}
+                  className="flex-1 px-2 py-1 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm"
+                  autoFocus
+                />
+                <button
+                  onClick={handleSaveRename}
+                  className="p-1 text-green-600 hover:bg-green-50 rounded"
+                  title="Save"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                </button>
+                <button
+                  onClick={handleCancelRename}
+                  className="p-1 text-red-600 hover:bg-red-50 rounded"
+                  title="Cancel"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            ) : (
+              <span className="flex-1">{node.name}</span>
+            )}
           </div>
 
           {/* 3-dot Menu */}
           <button
             onClick={(e) => {
               e.stopPropagation()
-              setShowMenu(showMenu === node.id ? null : node.id)
+              if (showMenu === node.id) {
+                setShowMenu(null)
+                setMenuPosition(null)
+              } else {
+                const rect = e.currentTarget.getBoundingClientRect()
+                setMenuPosition({
+                  top: rect.bottom + 4,
+                  left: rect.left - 192 + rect.width // 192px = w-48 menu width
+                })
+                setShowMenu(node.id)
+              }
             }}
             className="p-1 opacity-0 group-hover:opacity-100 hover:bg-gray-200 rounded"
           >
@@ -233,10 +344,22 @@ export default function GoogleDocsTabsView({ tree, onRefresh, onCreateModule }: 
           </button>
 
           {/* Dropdown Menu */}
-          {showMenu === node.id && (
+          {showMenu === node.id && menuPosition && (
             <>
-              <div className="fixed inset-0 z-40" onClick={() => setShowMenu(null)} />
-              <div className="absolute right-0 top-10 z-50 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-1">
+              <div
+                className="fixed inset-0 z-40"
+                onClick={() => {
+                  setShowMenu(null)
+                  setMenuPosition(null)
+                }}
+              />
+              <div
+                className="fixed z-50 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-1"
+                style={{
+                  top: `${menuPosition.top}px`,
+                  left: `${menuPosition.left}px`
+                }}
+              >
                 {canAddSubtab && (
                   <button
                     onClick={() => handleAddSubtab(node.id, node)}
@@ -267,7 +390,7 @@ export default function GoogleDocsTabsView({ tree, onRefresh, onCreateModule }: 
                   Duplicate
                 </button>
                 <button
-                  onClick={() => alert("Rename coming soon")}
+                  onClick={() => handleRename(node.id, node.name)}
                   className="w-full px-4 py-2 text-left text-sm hover:bg-gray-100 flex items-center gap-2"
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
