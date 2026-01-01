@@ -12,6 +12,8 @@ import type {
   ContentListResponse,
   UpdateContentRequest,
   UpdateContentResponse,
+  ParseThreadRequest,
+  ParseThreadResponse,
 } from "./types"
 
 /**
@@ -79,6 +81,19 @@ export async function updateContent(
   const response = await apiClient.put<UpdateContentResponse>(
     `/api/admin/content/${itemId}`,
     updates
+  )
+  return response.data
+}
+
+/**
+ * Parse Facebook thread with AI classification
+ */
+export async function parseThread(
+  request: ParseThreadRequest
+): Promise<ParseThreadResponse> {
+  const response = await apiClient.post<ParseThreadResponse>(
+    "/api/admin/parse-thread",
+    request
   )
   return response.data
 }

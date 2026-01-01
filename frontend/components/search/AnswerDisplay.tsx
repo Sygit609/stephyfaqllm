@@ -2,10 +2,11 @@
 
 /**
  * Answer Display Component
- * Shows the generated answer with metadata
+ * Shows the generated answer with metadata and copy functionality
  */
 
-import { Clock, DollarSign, MessageSquare, Zap, Globe, Calendar } from "lucide-react"
+import { useState } from "react"
+import { Clock, DollarSign, MessageSquare, Zap, Globe, Calendar, Copy, Check } from "lucide-react"
 import type { AnswerMetadata } from "@/lib/api/types"
 
 interface AnswerDisplayProps {
@@ -29,20 +30,45 @@ export function AnswerDisplay({
   webSearchUsed,
   queryId,
 }: AnswerDisplayProps) {
+  const [copied, setCopied] = useState(false)
+
+  const handleCopy = async () => {
+    await navigator.clipboard.writeText(answer)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
   return (
     <div className="bg-white rounded-lg shadow-md overflow-hidden">
-      {/* Header */}
-      <div className="bg-gradient-to-r from-blue-600 to-blue-700 px-6 py-4">
+      {/* Header with Copy Button */}
+      <div className="bg-gradient-to-r from-blue-600 to-blue-700 px-6 py-4 flex justify-between items-center">
         <h2 className="text-white font-medium text-lg">Answer</h2>
-        <p className="text-blue-100 text-sm mt-1">{query}</p>
+        <button
+          onClick={handleCopy}
+          className="flex items-center gap-2 px-3 py-1.5 bg-white/20 hover:bg-white/30 text-white rounded-md transition-colors"
+        >
+          {copied ? (
+            <>
+              <Check className="w-4 h-4" />
+              <span className="text-sm">Copied!</span>
+            </>
+          ) : (
+            <>
+              <Copy className="w-4 h-4" />
+              <span className="text-sm">Copy</span>
+            </>
+          )}
+        </button>
       </div>
 
-      {/* Answer Content */}
-      <div className="px-6 py-5">
-        <div className="prose max-w-none">
-          <p className="text-gray-800 leading-relaxed whitespace-pre-wrap">
-            {answer}
-          </p>
+      {/* Answer Content - Copyable Block */}
+      <div className="px-6 py-5 bg-gray-50">
+        <div className="bg-white border border-gray-200 rounded-lg p-4">
+          <div className="prose max-w-none">
+            <p className="text-gray-800 leading-relaxed whitespace-pre-wrap">
+              {answer}
+            </p>
+          </div>
         </div>
       </div>
 

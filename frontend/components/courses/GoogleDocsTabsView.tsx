@@ -41,7 +41,7 @@ export default function GoogleDocsTabsView({ tree, onRefresh, onCreateModule }: 
 
   const handleAddSubtab = async (parentId: string, parentNode: CourseTreeNode) => {
     try {
-      const subfolderCount = parentNode.children.filter(c => !c.is_leaf).length
+      const subfolderCount = parentNode.children.filter(c => c.type !== 'segment').length
       const newName = `Tab ${subfolderCount + 1}`
 
       await createSubfolder(parentId, {
@@ -163,13 +163,13 @@ export default function GoogleDocsTabsView({ tree, onRefresh, onCreateModule }: 
 
   const renderTab = (node: CourseTreeNode, level: number = 0) => {
     // NEVER render transcript segments in sidebar (they should only appear in content area)
-    if (node.is_leaf || node.metadata?.timecode_start != null) {
+    if (node.type === 'segment' || node.metadata?.timecode_start != null) {
       return null
     }
 
     const isSelected = selectedTab === node.id
     const isExpanded = expandedTabs.has(node.id)
-    const hasChildren = node.children.filter(c => !c.is_leaf && c.metadata?.timecode_start == null).length > 0
+    const hasChildren = node.children.filter(c => c.type !== 'segment' && c.metadata?.timecode_start == null).length > 0
     const canAddSubtab = node.hierarchy_level < 4
 
     return (
@@ -294,7 +294,7 @@ export default function GoogleDocsTabsView({ tree, onRefresh, onCreateModule }: 
         {isExpanded && hasChildren && (
           <div className="mt-1">
             {node.children
-              .filter(c => !c.is_leaf && c.metadata?.timecode_start == null)
+              .filter(c => c.type !== 'segment' && c.metadata?.timecode_start == null)
               .map(child => renderTab(child, level + 1))}
           </div>
         )}
@@ -327,7 +327,7 @@ export default function GoogleDocsTabsView({ tree, onRefresh, onCreateModule }: 
           {/* Tabs list */}
           <div className="space-y-1">
             {tree.children
-              .filter(c => !c.is_leaf && c.metadata?.timecode_start == null)
+              .filter(c => c.type !== 'segment' && c.metadata?.timecode_start == null)
               .map(child => renderTab(child))}
           </div>
         </div>
@@ -435,7 +435,7 @@ export default function GoogleDocsTabsView({ tree, onRefresh, onCreateModule }: 
               {/* Transcript Segments List */}
               {(() => {
                 const node = findNodeById(tree, selectedTab)
-                const transcripts = node?.children.filter(c => c.is_leaf || c.metadata?.timecode_start != null) || []
+                const transcripts = node?.children.filter(c => c.type === 'segment' || c.metadata?.timecode_start != null) || []
 
                 return transcripts.length > 0 ? (
                   <div className="mb-6">
@@ -494,7 +494,7 @@ export default function GoogleDocsTabsView({ tree, onRefresh, onCreateModule }: 
               {/* Upload Area - Only show if no transcripts exist */}
               {(() => {
                 const node = findNodeById(tree, selectedTab)
-                const transcripts = node?.children.filter(c => c.is_leaf || c.metadata?.timecode_start != null) || []
+                const transcripts = node?.children.filter(c => c.type === 'segment' || c.metadata?.timecode_start != null) || []
 
                 // Only show upload area if there are no transcripts
                 if (transcripts.length > 0) return null

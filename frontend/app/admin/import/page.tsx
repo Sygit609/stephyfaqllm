@@ -12,18 +12,26 @@ import ExtractionPreview from "@/components/admin/ExtractionPreview"
 import SaveConfirmation from "@/components/admin/SaveConfirmation"
 import BatchScreenshotUploader from "@/components/admin/BatchScreenshotUploader"
 import BatchExtractionPreview from "@/components/admin/BatchExtractionPreview"
+import { TextImporter } from "@/components/admin/TextImporter"
+import TextImportPreview from "@/components/admin/TextImportPreview"
+import { ThreadParserImporter } from "@/components/admin/ThreadParserImporter"
+import ThreadParserPreview from "@/components/admin/ThreadParserPreview"
 import { saveContent } from "@/lib/api/admin"
 import type {
   ExtractScreenshotResponse,
   SaveContentResponse,
-  BatchUpload
+  BatchUpload,
+  SaveContentRequest,
+  ParseThreadResponse
 } from "@/lib/api/types"
 
 type Step = "upload" | "preview" | "saved"
+type ImportMethod = "screenshot" | "text" | "thread-parser"
 
 export default function AdminImportPage() {
   const [currentStep, setCurrentStep] = useState<Step>("upload")
   const [mode, setMode] = useState<"single" | "batch">("single")
+  const [importMethod, setImportMethod] = useState<ImportMethod>("screenshot")
 
   // Single mode state
   const [extractionResult, setExtractionResult] = useState<ExtractScreenshotResponse | null>(null)
@@ -34,6 +42,12 @@ export default function AdminImportPage() {
   // Batch mode state
   const [batchUploads, setBatchUploads] = useState<BatchUpload[]>([])
   const [batchSaveResults, setBatchSaveResults] = useState<SaveContentResponse[]>([])
+
+  // Text import state
+  const [textImportData, setTextImportData] = useState<SaveContentRequest | null>(null)
+
+  // Thread parser state
+  const [threadParserData, setThreadParserData] = useState<ParseThreadResponse | null>(null)
 
   const handleExtractionComplete = (
     result: ExtractScreenshotResponse,
@@ -48,6 +62,16 @@ export default function AdminImportPage() {
 
   const handleBatchExtractionComplete = (uploads: BatchUpload[]) => {
     setBatchUploads(uploads)
+    setCurrentStep("preview")
+  }
+
+  const handleTextImportComplete = (data: SaveContentRequest) => {
+    setTextImportData(data)
+    setCurrentStep("preview")
+  }
+
+  const handleThreadParserComplete = (data: ParseThreadResponse) => {
+    setThreadParserData(data)
     setCurrentStep("preview")
   }
 
@@ -85,12 +109,15 @@ export default function AdminImportPage() {
   const handleStartOver = () => {
     setCurrentStep("upload")
     setMode("single")
+    setImportMethod("screenshot")
     setExtractionResult(null)
     setSaveResult(null)
     setSourceUrl("")
     setUploadedImage(null)
     setBatchUploads([])
     setBatchSaveResults([])
+    setTextImportData(null)
+    setThreadParserData(null)
   }
 
   return (
@@ -106,33 +133,76 @@ export default function AdminImportPage() {
               ← Back to Search
             </Link>
             {currentStep === "upload" && (
-              <div className="flex gap-2">
-                <button
-                  onClick={() => setMode("single")}
-                  className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-                    mode === "single"
-                      ? "bg-purple-600 text-white"
-                      : "bg-gray-200 text-gray-700 hover:bg-gray-300"
-                  }`}
-                >
-                  Single Upload
-                </button>
-                <button
-                  onClick={() => setMode("batch")}
-                  className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-                    mode === "batch"
-                      ? "bg-purple-600 text-white"
-                      : "bg-gray-200 text-gray-700 hover:bg-gray-300"
-                  }`}
-                >
-                  Batch Upload
-                </button>
+              <div className="flex flex-col gap-2">
+                {/* Import Method Toggle */}
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setImportMethod("screenshot")}
+                    className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                      importMethod === "screenshot"
+                        ? "bg-blue-600 text-white"
+                        : "bg-gray-200 text-gray-700 hover:bg-gray-300"
+                    }`}
+                  >
+                    📸 Screenshot
+                  </button>
+                  <button
+                    onClick={() => setImportMethod("text")}
+                    className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                      importMethod === "text"
+                        ? "bg-blue-600 text-white"
+                        : "bg-gray-200 text-gray-700 hover:bg-gray-300"
+                    }`}
+                  >
+                    📝 Text/Paste
+                  </button>
+                  <button
+                    onClick={() => setImportMethod("thread-parser")}
+                    className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                      importMethod === "thread-parser"
+                        ? "bg-blue-600 text-white"
+                        : "bg-gray-200 text-gray-700 hover:bg-gray-300"
+                    }`}
+                  >
+                    🧵 Thread Parser
+                  </button>
+                </div>
+
+                {/* Screenshot Mode Toggle (only show for screenshot import) */}
+                {importMethod === "screenshot" && (
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setMode("single")}
+                      className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                        mode === "single"
+                          ? "bg-purple-600 text-white"
+                          : "bg-gray-200 text-gray-700 hover:bg-gray-300"
+                      }`}
+                    >
+                      Single Upload
+                    </button>
+                    <button
+                      onClick={() => setMode("batch")}
+                      className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                        mode === "batch"
+                          ? "bg-purple-600 text-white"
+                          : "bg-gray-200 text-gray-700 hover:bg-gray-300"
+                      }`}
+                    >
+                      Batch Upload
+                    </button>
+                  </div>
+                )}
               </div>
             )}
           </div>
           <h1 className="text-3xl font-bold text-gray-900">Import Content</h1>
           <p className="text-gray-600 mt-2">
-            {mode === "batch"
+            {importMethod === "thread-parser"
+              ? "Paste entire Facebook threads for AI-powered parsing and classification"
+              : importMethod === "text"
+              ? "Paste Facebook post content directly for faster import"
+              : mode === "batch"
               ? "Upload multiple Facebook screenshots at once for bulk extraction"
               : "Upload Facebook screenshots to extract Q&A pairs automatically"}
           </p>
@@ -227,11 +297,19 @@ export default function AdminImportPage() {
 
         {/* Step Content */}
         <div className="bg-white rounded-lg shadow-sm p-8">
-          {currentStep === "upload" && mode === "single" && (
+          {currentStep === "upload" && importMethod === "text" && (
+            <TextImporter onComplete={handleTextImportComplete} />
+          )}
+
+          {currentStep === "upload" && importMethod === "thread-parser" && (
+            <ThreadParserImporter onComplete={handleThreadParserComplete} />
+          )}
+
+          {currentStep === "upload" && importMethod === "screenshot" && mode === "single" && (
             <ScreenshotUploader onExtractionComplete={handleExtractionComplete} />
           )}
 
-          {currentStep === "upload" && mode === "batch" && (
+          {currentStep === "upload" && importMethod === "screenshot" && mode === "batch" && (
             <BatchScreenshotUploader onExtractionComplete={handleBatchExtractionComplete} />
           )}
 
@@ -250,6 +328,22 @@ export default function AdminImportPage() {
               uploads={batchUploads}
               onCancel={handleStartOver}
               onSave={handleBatchSave}
+            />
+          )}
+
+          {currentStep === "preview" && importMethod === "text" && textImportData && (
+            <TextImportPreview
+              data={textImportData}
+              onSaveComplete={handleSaveComplete}
+              onCancel={handleStartOver}
+            />
+          )}
+
+          {currentStep === "preview" && importMethod === "thread-parser" && threadParserData && (
+            <ThreadParserPreview
+              data={threadParserData}
+              onSaveComplete={handleSaveComplete}
+              onCancel={handleStartOver}
             />
           )}
 

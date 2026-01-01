@@ -92,6 +92,10 @@ class QueryRequest(BaseModel):
     use_web_search: Optional[bool] = Field(
         True, description="Allow web search if needed"
     )
+    admin_input: Optional[str] = Field(
+        None,
+        description="Optional admin guidance to influence answer generation (e.g., 'emphasize X', 'explain simply')"
+    )
 
 
 class QueryResponse(BaseModel):
@@ -319,6 +323,50 @@ class UpdateContentResponse(BaseModel):
     success: bool
     message: str
     updated_item: ContentItem
+
+
+class GenerateTagsRequest(BaseModel):
+    """Request to generate AI tags for Q&A"""
+
+    question: str = Field(..., description="The question text")
+    answer: str = Field(..., description="The answer text")
+
+
+class GenerateTagsResponse(BaseModel):
+    """Response with AI-generated tags"""
+
+    tags: List[str] = Field(..., description="Generated tags")
+
+
+class ParseThreadRequest(BaseModel):
+    """Request to parse a Facebook thread with AI"""
+
+    thread_text: str = Field(..., description="Raw Facebook thread text (post + comments)")
+    source_url: str = Field(..., description="Facebook post URL")
+    provider: Optional[str] = Field("openai", description="LLM provider: openai or gemini")
+
+
+class ParsedQAPair(BaseModel):
+    """Single parsed Q&A with classification and hierarchy"""
+
+    question: str
+    answer: str
+    classification: str = Field(..., description="meaningful or filler")
+    confidence: float = Field(..., ge=0.0, le=1.0, description="Classification confidence")
+    reasoning: Optional[str] = Field(None, description="Why this was classified as meaningful/filler")
+    tags: List[str] = Field(default_factory=list, description="Auto-generated tags (empty for filler)")
+    parent_index: Optional[int] = Field(None, description="Index of parent Q&A in array (for hierarchy)")
+    depth: int = Field(0, description="Nesting level: 0=main, 1=direct reply, 2=nested reply")
+
+
+class ParseThreadResponse(BaseModel):
+    """Response with parsed Q&As"""
+
+    qa_pairs: List[ParsedQAPair]
+    total_parsed: int
+    meaningful_count: int
+    filler_count: int
+    metadata: Dict[str, Any] = Field(..., description="Model, tokens, cost, latency")
 
 
 # ============================================================

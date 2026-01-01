@@ -78,8 +78,8 @@ export default function FolderTreeNode({
     setIsCreatingSubfolder(true)
     setShowMenu(false)
     try {
-      // Count existing subfolders to generate name (exclude transcripts which are leaves)
-      const subfolderCount = node.children.filter(c => !c.is_leaf).length
+      // Count existing subfolders to generate name (exclude segment transcripts)
+      const subfolderCount = node.children.filter(c => c.type !== 'segment').length
       const newName = `Subfolder ${subfolderCount + 1}`
 
       await createSubfolder(node.id, {

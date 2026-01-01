@@ -26,7 +26,7 @@ class BaseLLMAdapter(ABC):
 
     @abstractmethod
     async def generate_answer(
-        self, query: str, context: str, system_prompt: str
+        self, query: str, context: str, system_prompt: str, max_tokens: int = 500
     ) -> Tuple[str, Dict[str, Any]]:
         """
         Generate answer given query and context
@@ -80,7 +80,7 @@ class OpenAIAdapter(BaseLLMAdapter):
             raise Exception(f"OpenAI embedding error: {e}")
 
     async def generate_answer(
-        self, query: str, context: str, system_prompt: str
+        self, query: str, context: str, system_prompt: str, max_tokens: int = 500
     ) -> Tuple[str, Dict[str, Any]]:
         """Generate answer using gpt-4o"""
         import time
@@ -95,7 +95,7 @@ class OpenAIAdapter(BaseLLMAdapter):
                     {"role": "user", "content": f"Context:\n{context}\n\nQuestion: {query}"},
                 ],
                 temperature=0.7,
-                max_tokens=500,
+                max_tokens=max_tokens,
             )
 
             latency_ms = int((time.time() - start_time) * 1000)
@@ -252,7 +252,7 @@ class GeminiAdapter(BaseLLMAdapter):
             raise Exception(f"Gemini embedding error: {e}")
 
     async def generate_answer(
-        self, query: str, context: str, system_prompt: str
+        self, query: str, context: str, system_prompt: str, max_tokens: int = 500
     ) -> Tuple[str, Dict[str, Any]]:
         """Generate answer using Gemini 2.0 Flash"""
         import time
@@ -260,9 +260,14 @@ class GeminiAdapter(BaseLLMAdapter):
         start_time = time.time()
 
         try:
+            generation_config = genai.types.GenerationConfig(
+                max_output_tokens=max_tokens
+            )
+
             model = genai.GenerativeModel(
                 model_name=self.generation_model,
                 system_instruction=system_prompt,
+                generation_config=generation_config
             )
 
             prompt = f"Context:\n{context}\n\nQuestion: {query}"

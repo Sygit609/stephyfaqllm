@@ -1,0 +1,53 @@
+
+
+- allow admin to ask LLM base on the answer, to modify it, question it, or include optional admin input field tgt with student's question
+
+- classify the type of posts, and which ai should handle what
+(do this one first) (multiple type of questions so different agents for 1 post sometimes)
+-maybe backend should classify as well?
+__________________________________________
+
+some posts are not questions, some are like sharing excitement, include LLM prompt setting to be able to respond to that accordingly
+
+analyse types of fb posts, and funnel it to right tools/ agents accordingly
+
+advanced (later)
+include ability to include knowledge source the coaches prefer, to curate more indepth answer that are not covered in the course
+
+screenshot function (copy paste, not download upload)
+
+Side panel for llm faq tool to paste questions in or fish answer out conveniently
+
+Need to think about how to arrange the ui and ux of time sensitive info like zoom date, time , links,.... Google calendar integration
+
+for importing content, have option to copy paste post text from fb instead of screenshot, Question + answer(optional)(if no answer=unanswered)
+of course include link as well
+
+need to think about how to arrange the import content menu
+since there are:
+- Course transcript
+- Facebook group posts
+- Calendar (event dates, zoom link etc...) integrated w google calendar
+- Other (in future maybe business books so that admin can come up with even more impressive and informed replies)
+
+
+Maybe when searching can add gif (searching course, searching community posts, cooking with Ai...)
+
+
+
+
+Correct Application Pages
+Homepage
+http://localhost:3002/
+Content Table (Browse Q&A and Search)
+http://localhost:3002/admin/content
+Courses Management (Google Docs-style UI with transcripts)
+http://localhost:3002/admin/courses
+Import Page (Upload screenshots/content)
+http://localhost:3002/admin/import
+Backend
+Backend Health Check
+http://localhost:8001/health
+API Documentation
+http://localhost:8001/docs
+The main search page where you can test the improved citations is: http://localhost:3002/admin/content This page has the search functionality with the AI assistant that will now show improved video citations with course names, module names, and clickable timestamps!

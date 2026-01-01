@@ -2,7 +2,8 @@
 
 /**
  * Main Search Interface Component
- * Handles query input, model selection, and displays results
+ * Handles query input, model selection, admin guidance, and displays results
+ * Supports iterative refinement with admin input
  */
 
 import { useState } from "react"
@@ -15,7 +16,9 @@ import type { ModelProvider } from "@/lib/api/types"
 
 export function SearchInterface() {
   const [queryText, setQueryText] = useState("")
+  const [adminInput, setAdminInput] = useState("")
   const [selectedProvider, setSelectedProvider] = useState<ModelProvider>("openai")
+  const [searchState, setSearchState] = useState<"initial" | "answer">("initial")
 
   const { data, isLoading, error, executeQuery } = useQuery()
 
@@ -28,54 +31,110 @@ export function SearchInterface() {
       provider: selectedProvider,
       search_limit: 5,
       use_web_search: true,
+      admin_input: adminInput.trim() || undefined,
     })
+
+    setSearchState("answer")
   }
 
-  const handleClear = () => {
+  const handleNewQuestion = () => {
     setQueryText("")
+    setAdminInput("")
+    setSearchState("initial")
+  }
+
+  const handleRefineAnswer = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!queryText.trim()) return
+
+    await executeQuery({
+      query: queryText.trim(),
+      provider: selectedProvider,
+      search_limit: 5,
+      use_web_search: true,
+      admin_input: adminInput.trim() || undefined,
+    })
   }
 
   return (
     <div className="space-y-6">
       {/* Search Form */}
       <div className="bg-white rounded-lg shadow-md p-6">
-        <form onSubmit={handleSubmit} className="space-y-4">
-          {/* Model Selector */}
-          <div className="flex justify-between items-center">
-            <label className="text-sm font-medium text-gray-700">
-              Model Provider
+        <form onSubmit={searchState === "initial" ? handleSubmit : handleRefineAnswer} className="space-y-4">
+
+          {/* Model Selector - only show in initial state */}
+          {searchState === "initial" && (
+            <div className="flex justify-between items-center">
+              <label className="text-sm font-medium text-gray-700">
+                Model Provider
+              </label>
+              <ModelSelector
+                selected={selectedProvider}
+                onChange={setSelectedProvider}
+                disabled={isLoading}
+              />
+            </div>
+          )}
+
+          {/* Student Question */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Student's Question {searchState === "answer" && "(read-only)"}
             </label>
-            <ModelSelector
-              selected={selectedProvider}
-              onChange={setSelectedProvider}
-              disabled={isLoading}
-            />
+
+            {searchState === "initial" ? (
+              <textarea
+                value={queryText}
+                onChange={(e) => setQueryText(e.target.value)}
+                placeholder="Paste the student's question from Facebook..."
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                rows={4}
+                disabled={isLoading}
+              />
+            ) : (
+              <div className="px-4 py-3 bg-gray-50 border border-gray-200 rounded-lg text-gray-700 whitespace-pre-wrap">
+                {queryText}
+              </div>
+            )}
           </div>
 
-          {/* Query Input */}
-          <div className="relative">
+          {/* Admin Input - Always editable */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Admin Input (optional)
+            </label>
             <textarea
-              value={queryText}
-              onChange={(e) => setQueryText(e.target.value)}
-              placeholder="Ask a question about your community..."
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+              value={adminInput}
+              onChange={(e) => setAdminInput(e.target.value)}
+              placeholder={
+                searchState === "initial"
+                  ? "Optional: Provide guidance like 'emphasize pricing', 'explain for beginners', 'focus on technical details', etc."
+                  : "Refine your guidance to improve the answer..."
+              }
+              className="w-full px-4 py-3 border border-purple-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent resize-none"
               rows={3}
               disabled={isLoading}
             />
+            <p className="mt-1 text-xs text-gray-500">
+              {searchState === "initial"
+                ? "This guidance will influence how the AI generates the answer."
+                : "Adjust your guidance and click 'Refine Answer' to regenerate with new direction."}
+            </p>
           </div>
 
           {/* Action Buttons */}
           <div className="flex gap-3 justify-end">
-            {queryText && (
+            {searchState === "answer" && (
               <button
                 type="button"
-                onClick={handleClear}
+                onClick={handleNewQuestion}
                 disabled={isLoading}
-                className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 disabled:opacity-50"
+                className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Clear
+                New Question
               </button>
             )}
+
             <button
               type="submit"
               disabled={isLoading || !queryText.trim()}
@@ -84,12 +143,12 @@ export function SearchInterface() {
               {isLoading ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin" />
-                  Searching...
+                  {searchState === "initial" ? "Searching..." : "Refining..."}
                 </>
               ) : (
                 <>
                   <Search className="w-4 h-4" />
-                  Search
+                  {searchState === "initial" ? "Search" : "Refine Answer"}
                 </>
               )}
             </button>

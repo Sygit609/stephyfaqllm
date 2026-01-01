@@ -76,6 +76,7 @@ export interface QueryRequest {
   provider?: "gemini" | "openai"
   search_limit?: number
   use_web_search?: boolean
+  admin_input?: string
 }
 
 export interface QueryResponse {
@@ -298,6 +299,42 @@ export interface UpdateContentResponse {
   success: boolean
   message: string
   updated_item: ContentItem
+}
+
+// ============================================================================
+// Thread Parser Types
+// ============================================================================
+
+export interface ParseThreadRequest {
+  thread_text: string
+  source_url: string
+  provider?: "gemini" | "openai"
+}
+
+export interface ParsedQAPair {
+  question: string
+  answer: string
+  classification: "meaningful" | "filler"
+  confidence: number  // 0.0 to 1.0
+  reasoning?: string | null
+  tags: string[]
+  parent_index?: number | null
+  depth: number
+}
+
+export interface ParseThreadResponse {
+  qa_pairs: ParsedQAPair[]
+  total_parsed: number
+  meaningful_count: number
+  filler_count: number
+  metadata: {
+    model: string
+    tokens_input: number
+    tokens_output: number
+    cost_usd: number
+    latency_ms: number
+    provider: string
+  }
 }
 
 // ============================================================================

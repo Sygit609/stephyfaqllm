@@ -16,6 +16,8 @@ from app.models.schemas import (
     SaveContentRequest, SaveContentResponse,
     ContentListFilter, ContentListResponse, ContentItem,
     UpdateContentRequest, UpdateContentResponse,
+    GenerateTagsRequest, GenerateTagsResponse,
+    ParseThreadRequest, ParseThreadResponse, ParsedQAPair,
     CreateFolderRequest, CreateCourseRequest, CreateModuleRequest, CreateLessonRequest,
     TranscribeRequest, TranscriptionResponse,
     UploadVideoResponse, UploadTranscriptResponse,
@@ -165,6 +167,7 @@ async def query_with_search_and_answer(request: QueryRequest):
     """
     try:
         provider = request.provider or settings.default_model_provider
+        admin_input = request.admin_input  # Extract admin input
 
         # Step 1: Classify intent
         intent = await search.classify_intent(request.query, provider)
@@ -200,21 +203,24 @@ async def query_with_search_and_answer(request: QueryRequest):
                 query=request.query,
                 internal_sources=internal_sources,
                 web_results=web_search_result,
-                provider=provider
+                provider=provider,
+                admin_input=admin_input  # Pass admin input
             )
         elif web_used:
             # Use only web sources
             answer_text, gen_metadata = await generation.generate_with_web_sources(
                 query=request.query,
                 web_results=web_search_result,
-                provider=provider
+                provider=provider,
+                admin_input=admin_input  # Pass admin input
             )
         else:
             # Use only internal sources
             answer_text, gen_metadata = await generation.generate_grounded_answer(
                 query=request.query,
                 sources=internal_sources,
-                provider=provider
+                provider=provider,
+                admin_input=admin_input  # Pass admin input
             )
 
         # Step 6: Log the query
@@ -444,6 +450,119 @@ async def save_extracted_content(request: SaveContentRequest):
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Save error: {str(e)}")
+
+
+@router.post("/api/admin/generate-tags", response_model=GenerateTagsResponse)
+async def generate_tags_for_qa(request: GenerateTagsRequest):
+    """
+    Generate AI tags for a Q&A pair
+    Uses LLM to extract relevant topic tags from question and answer
+    """
+    try:
+        # Use OpenAI adapter for tag generation (Gemini quota exceeded)
+        from app.services.llm_adapters import get_adapter
+
+        adapter = get_adapter("openai")
+
+        # Create prompt for tag generation
+        system_prompt = """You are a tag generation assistant for an online business education platform (Online Income Lab).
+
+Your task is to extract 3-5 concise, relevant tags from Q&A pairs.
+
+RULES:
+1. Return ONLY tags, one per line
+2. Tags should be business/niche topics (e.g., "pricing", "digital products", "niche selection")
+3. Be specific but concise (2-3 words max per tag)
+4. Focus on the main topics, not minor details
+5. Use lowercase
+6. No special characters or punctuation
+7. Avoid generic tags like "business" or "online"
+
+Example:
+Q: How do I price my digital product?
+A: Focus on value-based pricing...
+
+Good tags:
+digital product pricing
+value-based pricing
+pricing strategy
+
+Bad tags:
+business
+online
+how to price things"""
+
+        user_prompt = f"""Generate tags for this Q&A:
+
+Question: {request.question}
+
+Answer: {request.answer}
+
+Return only the tags, one per line."""
+
+        # Generate tags
+        response, _ = await adapter.generate_answer(
+            query=user_prompt,
+            context="",
+            system_prompt=system_prompt
+        )
+
+        # Parse tags from response
+        tags = [
+            tag.strip().lower()
+            for tag in response.strip().split('\n')
+            if tag.strip() and len(tag.strip()) > 2
+        ]
+
+        # Limit to 5 tags
+        tags = tags[:5]
+
+        return GenerateTagsResponse(tags=tags)
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Tag generation error: {str(e)}")
+
+
+@router.post("/api/admin/parse-thread", response_model=ParseThreadResponse)
+async def parse_thread(request: ParseThreadRequest):
+    """
+    Parse Facebook thread with AI classification
+
+    Extracts Q&A pairs from full thread text, classifies as meaningful vs filler,
+    generates tags for meaningful content, and preserves thread hierarchy.
+    """
+    try:
+        from app.services.thread_parser import parse_facebook_thread, validate_parsed_qa
+
+        # Parse thread with LLM
+        qa_pairs, metadata = await parse_facebook_thread(
+            thread_text=request.thread_text,
+            source_url=request.source_url,
+            provider=request.provider or "openai"
+        )
+
+        # Validate and clean parsed Q&As
+        validated_pairs = []
+        for qa in qa_pairs:
+            if await validate_parsed_qa(qa):
+                validated_pairs.append(qa)
+            else:
+                print(f"Warning: Skipping invalid Q&A: {qa}")
+
+        # Count classifications
+        meaningful_count = sum(1 for qa in validated_pairs if qa.get("classification") == "meaningful")
+        filler_count = sum(1 for qa in validated_pairs if qa.get("classification") == "filler")
+
+        return ParseThreadResponse(
+            qa_pairs=validated_pairs,
+            total_parsed=len(validated_pairs),
+            meaningful_count=meaningful_count,
+            filler_count=filler_count,
+            metadata=metadata
+        )
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Thread parsing error: {str(e)}")
 
 
 @router.get("/api/admin/content-list", response_model=ContentListResponse)

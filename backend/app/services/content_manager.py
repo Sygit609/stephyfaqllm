@@ -64,26 +64,62 @@ async def save_extracted_content(
     Returns:
         Dict with parent_id and list of child_ids
     """
-    # Create parent entry (the screenshot itself)
+    # Create parent entry
+    # For text imports (no media_url), use the first Q&A as the parent
+    # For screenshot imports, create a metadata-only parent
     parent_id = str(uuid4())
-    parent_data = {
-        "id": parent_id,
-        "content_type": content_type,
-        "question": f"Screenshot from {source_url}",
-        "answer": f"Contains {len(qa_pairs)} Q&A pair(s)",
-        "source_url": source_url,
-        "media_url": media_url,
-        "extracted_by": extracted_by,
-        "extraction_confidence": float(overall_confidence),
-        "raw_content": raw_extraction,
-        "parent_id": None,  # This is the parent
-        "date": datetime.utcnow().date().isoformat(),  # Required field
-        "created_at": datetime.utcnow().isoformat(),
-        "updated_at": datetime.utcnow().isoformat(),
-        # No embeddings for parent (it's just metadata)
-        "embedding_openai": None,
-        "embedding_gemini": None,
-    }
+
+    if not media_url and qa_pairs:
+        # Text import: first Q&A becomes the parent (searchable)
+        first_qa = qa_pairs[0]
+        combined_text = f"{first_qa['question']}\n{first_qa['answer']}"
+        openai_emb, gemini_emb = await generate_dual_embeddings(combined_text)
+
+        parent_data = {
+            "id": parent_id,
+            "content_type": content_type,
+            "question": first_qa["question"],
+            "answer": first_qa["answer"],
+            "tags": first_qa.get("tags", []) if isinstance(first_qa.get("tags"), list) else [],
+            "source_url": source_url,
+            "media_url": media_url,
+            "extracted_by": extracted_by,
+            "extraction_confidence": float(overall_confidence),
+            "raw_content": raw_extraction,
+            "parent_id": None,  # This is the parent
+            "date": datetime.utcnow().date().isoformat(),
+            "created_at": datetime.utcnow().isoformat(),
+            "updated_at": datetime.utcnow().isoformat(),
+            # Parent for text imports gets embeddings (it's searchable content)
+            "embedding_openai": openai_emb,
+            "embedding_gemini": gemini_emb,
+        }
+
+        # Skip first Q&A when creating children (it's already the parent)
+        qa_pairs_to_process = qa_pairs[1:]
+    else:
+        # Screenshot import: metadata-only parent (not searchable)
+        parent_data = {
+            "id": parent_id,
+            "content_type": content_type,
+            "question": f"Screenshot from {source_url}",
+            "answer": f"Contains {len(qa_pairs)} Q&A pair(s)",
+            "source_url": source_url,
+            "media_url": media_url,
+            "extracted_by": extracted_by,
+            "extraction_confidence": float(overall_confidence),
+            "raw_content": raw_extraction,
+            "parent_id": None,  # This is the parent
+            "date": datetime.utcnow().date().isoformat(),
+            "created_at": datetime.utcnow().isoformat(),
+            "updated_at": datetime.utcnow().isoformat(),
+            # No embeddings for screenshot parents (just metadata)
+            "embedding_openai": None,
+            "embedding_gemini": None,
+        }
+
+        # Process all Q&As as children for screenshots
+        qa_pairs_to_process = qa_pairs
 
     # Insert parent
     parent_result = db.table("knowledge_items").insert(parent_data).execute()
@@ -91,10 +127,10 @@ async def save_extracted_content(
     if not parent_result.data:
         raise Exception("Failed to create parent entry")
 
-    # Create child entries for each Q&A pair
+    # Create child entries for remaining Q&A pairs
     child_ids = []
 
-    for i, qa in enumerate(qa_pairs):
+    for i, qa in enumerate(qa_pairs_to_process):
         question = qa.get("question", "")
         answer = qa.get("answer", "")
         tags = qa.get("tags", [])

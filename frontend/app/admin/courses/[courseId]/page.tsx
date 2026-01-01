@@ -11,23 +11,27 @@ import { getCourseTree } from "@/lib/api/courses"
 import type { CourseTreeNode } from "@/lib/api/types"
 import GoogleDocsTabsView from "@/components/courses/GoogleDocsTabsView"
 
-export default function CourseDetailPage({ params }: { params: { courseId: string } }) {
+export default function CourseDetailPage({ params }: { params: Promise<{ courseId: string }> }) {
   const [courseTree, setCourseTree] = useState<CourseTreeNode | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set())
   const [isCreatingCourse, setIsCreatingCourse] = useState(false)
+  const [courseId, setCourseId] = useState<string>("")
 
   useEffect(() => {
-    loadCourseTree()
-  }, [params.courseId])
+    params.then(p => {
+      setCourseId(p.courseId)
+      loadCourseTree(p.courseId)
+    })
+  }, [params])
 
-  const loadCourseTree = async () => {
+  const loadCourseTree = async (id: string) => {
     setIsLoading(true)
     setError(null)
 
     try {
-      const tree = await getCourseTree(params.courseId)
+      const tree = await getCourseTree(id)
       setCourseTree(tree)
       // Auto-expand the course node
       setExpandedNodes(new Set([tree.id]))
@@ -53,23 +57,23 @@ export default function CourseDetailPage({ params }: { params: { courseId: strin
   const handleCreateNewModule = async () => {
     setIsCreatingCourse(true)
     try {
-      if (!courseTree) return
+      if (!courseTree || !courseId) return
 
       // Count existing direct children (modules) of the current course
-      const moduleCount = courseTree.children.filter(c => !c.is_leaf).length
+      const moduleCount = courseTree.children.filter(c => c.type === 'module').length
       const newName = `Module ${moduleCount + 1}`
 
       // Import createSubfolder
       const { createSubfolder } = await import("@/lib/api/courses")
 
-      await createSubfolder(params.courseId, {
+      await createSubfolder(courseId, {
         name: newName,
         description: "",
         thumbnail_url: null
       })
 
       // Refresh the tree
-      loadCourseTree()
+      loadCourseTree(courseId)
     } catch (err: any) {
       alert(err.message || "Failed to create module")
     } finally {
@@ -136,7 +140,7 @@ export default function CourseDetailPage({ params }: { params: { courseId: strin
         {!isLoading && courseTree && (
           <GoogleDocsTabsView
             tree={courseTree}
-            onRefresh={loadCourseTree}
+            onRefresh={() => loadCourseTree(courseId)}
             onCreateModule={handleCreateNewModule}
           />
         )}
