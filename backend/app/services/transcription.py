@@ -119,17 +119,82 @@ class TranscriptionService:
 
         return segments
 
+    def parse_markdown_to_segments(self, markdown_content: str, segment_duration: int = 120) -> List[Dict]:
+        """
+        Parse markdown file into segments without timestamps.
+        Splits content into logical chunks based on paragraphs and headings.
+
+        Args:
+            markdown_content: Raw markdown content
+            segment_duration: Target segment duration (not used for markdown, kept for consistency)
+
+        Returns:
+            List of segments without timestamps
+        """
+        lines = markdown_content.strip().split('\n')
+        segments = []
+        current_text = ""
+
+        for line in lines:
+            line = line.strip()
+
+            # Skip empty lines
+            if not line:
+                if current_text:
+                    # Empty line signals end of paragraph
+                    segments.append({
+                        "start_time": None,
+                        "end_time": None,
+                        "text": current_text.strip()
+                    })
+                    current_text = ""
+                continue
+
+            # Heading - create segment for previous content and start fresh
+            if line.startswith('#'):
+                if current_text:
+                    segments.append({
+                        "start_time": None,
+                        "end_time": None,
+                        "text": current_text.strip()
+                    })
+                # Add heading as its own segment
+                heading_text = line.lstrip('#').strip()
+                if heading_text:
+                    segments.append({
+                        "start_time": None,
+                        "end_time": None,
+                        "text": heading_text
+                    })
+                current_text = ""
+            else:
+                # Regular line - add to current text
+                if current_text:
+                    current_text += " " + line
+                else:
+                    current_text = line
+
+        # Add final segment if any
+        if current_text:
+            segments.append({
+                "start_time": None,
+                "end_time": None,
+                "text": current_text.strip()
+            })
+
+        return segments
+
     def parse_uploaded_transcript(
         self,
         file_content: str,
         file_format: str
     ) -> List[Dict]:
         """
-        Parse manually uploaded transcript file (.srt or .vtt)
+        Parse manually uploaded transcript file (.srt, .vtt, or .md)
 
         Args:
             file_content: Raw file content as string
-            file_format: 'srt' or 'vtt'
+            file_format: 'srt', 'vtt', or 'md'
 
         Returns:
             List of segments
@@ -140,6 +205,9 @@ class TranscriptionService:
             # Convert VTT to SRT format first
             srt_text = self._convert_vtt_to_srt(file_content)
             return self.parse_srt_to_segments(srt_text)
+        elif file_format == "md":
+            # Parse markdown as plain text segments
+            return self.parse_markdown_to_segments(file_content)
         else:
             raise ValueError(f"Unsupported transcript format: {file_format}")
 
@@ -173,29 +241,39 @@ class TranscriptionService:
         created_ids = []
 
         for segment in segments:
-            # Format timestamp for display
-            start_mm_ss = self._seconds_to_mmss(segment["start_time"])
+            # Handle timestamps (None for markdown files, seconds for SRT/VTT)
+            start_time = segment.get("start_time")
+            end_time = segment.get("end_time")
 
-            # Generate embeddings with rich context
-            # Format: "{course_name} - {module_name} - {lesson_name} ({mm:ss}): {transcript_text}"
-            context_text = f"{course_name} - {module_name} - {lesson_name} ({start_mm_ss}): {segment['text']}"
+            if start_time is not None:
+                # Format timestamp for display
+                start_mm_ss = self._seconds_to_mmss(start_time)
+                # Generate embeddings with rich context including timestamp
+                context_text = f"{course_name} - {module_name} - {lesson_name} ({start_mm_ss}): {segment['text']}"
+                question_text = f"Transcript from {lesson_name} at {start_mm_ss}"
+                content_type = "video"
+            else:
+                # No timestamp (markdown files)
+                context_text = f"{course_name} - {module_name} - {lesson_name}: {segment['text']}"
+                question_text = f"Content from {lesson_name}"
+                content_type = "manual"  # Use 'manual' as it's allowed by DB constraint
 
             # Generate dual embeddings
             openai_embedding, gemini_embedding = await generate_dual_embeddings(context_text)
 
             # Create segment entry
             segment_data = {
-                "content_type": "video",
+                "content_type": content_type,
                 "hierarchy_level": 4,  # Segment level
                 "parent_id": lesson_id,
                 "course_id": course_id,
                 "module_id": module_id,
                 "lesson_id": lesson_id,
-                "question": f"Transcript from {lesson_name} at {start_mm_ss}",
+                "question": question_text,
                 "answer": segment["text"],
-                "media_url": video_url,
-                "timecode_start": segment["start_time"],
-                "timecode_end": segment["end_time"],
+                "media_url": video_url if video_url else None,
+                "timecode_start": start_time,
+                "timecode_end": end_time,
                 "date": date.today().isoformat(),  # Required field from original schema
                 "embedding_openai": openai_embedding,
                 "embedding_gemini": gemini_embedding,

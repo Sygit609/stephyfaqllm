@@ -180,8 +180,8 @@ export default function GoogleDocsTabsView({ tree, onRefresh, onCreateModule }: 
     if (!file) return
 
     // Check file type
-    if (!file.name.endsWith('.srt') && !file.name.endsWith('.vtt')) {
-      setUploadError("Please upload a .srt or .vtt file")
+    if (!file.name.endsWith('.srt') && !file.name.endsWith('.vtt') && !file.name.endsWith('.md')) {
+      setUploadError("Please upload a .srt, .vtt, or .md file")
       return
     }
 
@@ -700,7 +700,7 @@ export default function GoogleDocsTabsView({ tree, onRefresh, onCreateModule }: 
       <input
         ref={fileInputRef}
         type="file"
-        accept=".srt,.vtt"
+        accept=".srt,.vtt,.md"
         onChange={handleFileChange}
         className="hidden"
       />

@@ -175,11 +175,12 @@ async def query_with_search_and_answer(request: QueryRequest):
         # Step 2: Detect recency
         recency_required = search.detect_recency_need(request.query)
 
-        # Step 3: Hybrid search
+        # Step 3: Hybrid search (with admin guidance)
         internal_sources = await search.hybrid_search(
             query=request.query,
             provider=provider,
-            limit=request.search_limit or settings.default_search_limit
+            limit=request.search_limit or settings.default_search_limit,
+            admin_input=admin_input  # Pass admin input to guide search
         )
 
         # Step 4: Determine if web search is needed
@@ -981,7 +982,7 @@ async def transcribe_lesson(lesson_id: str, request: TranscribeRequest):
 
 @router.post("/api/admin/lessons/{lesson_id}/upload-transcript", response_model=UploadTranscriptResponse)
 async def upload_transcript(lesson_id: str, file: UploadFile = File(...)):
-    """Upload manual transcript file (.srt or .vtt)"""
+    """Upload manual transcript file (.srt, .vtt, or .md)"""
     try:
         db = get_db()
 
@@ -1027,7 +1028,14 @@ async def upload_transcript(lesson_id: str, file: UploadFile = File(...)):
         file_text = file_content.decode("utf-8")
 
         # Determine format
-        file_format = "srt" if file.filename.endswith(".srt") else "vtt"
+        if file.filename.endswith(".srt"):
+            file_format = "srt"
+        elif file.filename.endswith(".vtt"):
+            file_format = "vtt"
+        elif file.filename.endswith(".md"):
+            file_format = "md"
+        else:
+            file_format = "srt"  # default fallback
 
         # Parse transcript
         segments = transcription_service.parse_uploaded_transcript(file_text, file_format)
@@ -1065,6 +1073,104 @@ async def upload_transcript(lesson_id: str, file: UploadFile = File(...)):
         error_details = traceback.format_exc()
         print(f"Upload transcript error: {error_details}")
         raise HTTPException(status_code=500, detail=f"Upload transcript error: {str(e)}")
+
+
+@router.post("/api/admin/lessons/{lesson_id}/regenerate-embeddings")
+async def regenerate_lesson_embeddings(lesson_id: str):
+    """
+    Regenerate embeddings for segments that exist in course_folders but not in knowledge_items
+    This fixes the issue where transcripts were uploaded but embeddings failed to generate
+    """
+    try:
+        db = get_db()
+
+        # For MVP, use the known course ID
+        course_id = "233efed3-6f20-4f9c-a15a-1b3ee17118dd"
+
+        # Get course tree
+        course_tree = await course_manager.get_course_tree(course_id, db)
+
+        # Find the lesson node and its parent path
+        def find_node_with_path(tree, target_id, path=None):
+            if path is None:
+                path = []
+
+            current_path = path + [{"id": tree["id"], "name": tree["name"]}]
+
+            if tree["id"] == target_id:
+                return tree, current_path
+
+            for child in tree.get("children", []):
+                result, result_path = find_node_with_path(child, target_id, current_path)
+                if result:
+                    return result, result_path
+
+            return None, []
+
+        lesson_node, path = find_node_with_path(course_tree, lesson_id)
+
+        if not lesson_node or len(path) < 3:
+            raise HTTPException(status_code=404, detail="Lesson not found or invalid hierarchy")
+
+        # Extract hierarchy from path
+        course_name = path[0]["name"]
+        module_id = path[1]["id"]
+        module_name = path[1]["name"]
+        lesson_name = path[-1]["name"]
+
+        # Extract segments from lesson node
+        segments_to_create = []
+        for child in lesson_node.get("children", []):
+            if child.get("type") == "segment":
+                # Extract segment info
+                metadata = child.get("metadata") or {}
+                description = child.get("description", "")
+
+                if description and len(description.strip()) > 10:
+                    segments_to_create.append({
+                        "text": description,
+                        "start_time": metadata.get("timecode_start"),
+                        "end_time": metadata.get("timecode_end")
+                    })
+
+        if not segments_to_create:
+            return {
+                "success": True,
+                "message": "No segments found to process",
+                "segments_created": 0
+            }
+
+        # Get video URL from lesson metadata
+        lesson_metadata = lesson_node.get("metadata") or {}
+        video_url = lesson_metadata.get("media_url")
+
+        # Create knowledge_items for these segments
+        segment_ids = await transcription_service.create_transcript_segments(
+            lesson_id=lesson_id,
+            course_id=course_id,
+            module_id=module_id,
+            segments=segments_to_create,
+            video_url=video_url or "",
+            db=db,
+            lesson_name=lesson_name,
+            module_name=module_name,
+            course_name=course_name
+        )
+
+        return {
+            "success": True,
+            "message": f"Successfully created {len(segment_ids)} knowledge items",
+            "segments_created": len(segment_ids),
+            "segment_ids": segment_ids
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        error_details = traceback.format_exc()
+        print(f"Regenerate embeddings error: {error_details}")
+        raise HTTPException(status_code=500, detail=f"Regenerate embeddings error: {str(e)}")
 
 
 @router.get("/api/admin/lessons/{lesson_id}/segments", response_model=list[Segment])

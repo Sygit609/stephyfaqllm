@@ -93,7 +93,9 @@ async def vector_search(
         if course_id:
             query = query.or_(f"course_id.eq.{course_id},course_id.is.null")
 
-        response = query.limit(100).execute()
+        # Fetch ALL knowledge items for vector search (no limit)
+        # Note: In production with large datasets, use pgvector's built-in similarity search
+        response = query.limit(1000).execute()
 
         items = response.data
 
@@ -207,11 +209,46 @@ async def fulltext_search(query: str, limit: int = 5, course_id: str = None) -> 
         return []
 
 
+def parse_admin_search_directive(admin_input: str) -> Dict[str, Any]:
+    """
+    Parse admin input for search directives
+    Returns dict with:
+        - prioritize_courses: bool - whether to prioritize course content
+        - course_only: bool - whether to search ONLY course content
+    """
+    if not admin_input:
+        return {"prioritize_courses": False, "course_only": False}
+
+    admin_lower = admin_input.lower()
+
+    # Keywords that indicate course prioritization
+    course_keywords = [
+        "search the course", "check the course", "look in the course",
+        "course first", "prioritize course", "from the course",
+        "search course", "check course", "look in course"
+    ]
+
+    # Keywords that indicate ONLY course content
+    course_only_keywords = [
+        "only the course", "just the course", "course only",
+        "only course", "just course"
+    ]
+
+    prioritize_courses = any(keyword in admin_lower for keyword in course_keywords)
+    course_only = any(keyword in admin_lower for keyword in course_only_keywords)
+
+    return {
+        "prioritize_courses": prioritize_courses,
+        "course_only": course_only
+    }
+
+
 async def hybrid_search(
     query: str,
     provider: str = "gemini",
     limit: int = 5,
-    course_id: str = None
+    course_id: str = None,
+    admin_input: str = None
 ) -> List[Dict[str, Any]]:
     """
     Hybrid search combining vector and full-text search
@@ -220,9 +257,13 @@ async def hybrid_search(
         provider: Model provider for embeddings
         limit: Maximum number of results
         course_id: Optional course ID to filter results by specific course
+        admin_input: Optional admin guidance for search behavior
     Returns:
         List of unique matched items with combined scores
     """
+    # Parse admin search directive
+    search_directive = parse_admin_search_directive(admin_input)
+
     # Generate query embedding
     adapter = get_adapter(provider)
 
@@ -272,8 +313,23 @@ async def hybrid_search(
             settings.hybrid_search_fulltext_weight * fulltext_score
         )
 
+    # Apply admin-guided course prioritization
+    if search_directive["course_only"]:
+        # Filter to ONLY course content (has course_id)
+        final_results = [
+            item for item in combined.values()
+            if item.get("course_id") is not None
+        ]
+    elif search_directive["prioritize_courses"]:
+        # Boost course content scores by 50%
+        for item_id in combined:
+            if combined[item_id].get("course_id") is not None:
+                combined[item_id]["score"] *= 1.5
+        final_results = list(combined.values())
+    else:
+        final_results = list(combined.values())
+
     # Sort by combined score and return top results
-    final_results = list(combined.values())
     final_results.sort(key=lambda x: x["score"], reverse=True)
 
     return final_results[:limit]

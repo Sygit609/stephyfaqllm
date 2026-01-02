@@ -156,19 +156,20 @@ class CourseManagerService:
                 if item.get("parent_id") == node["id"]
             ]
 
-            # Determine if this is a transcript segment (has timecode)
-            # Folders use content_type="video", transcripts have timecode_start
-            is_transcript = node.get("timecode_start") is not None
-            node_type = "transcript" if is_transcript else "folder"
+            # Determine if this is a segment (actual transcript/content segment)
+            # Segments are identified by having extracted_by field (manual, whisper, etc.)
+            # Regular folders/lessons do NOT have extracted_by
+            is_segment = node.get("extracted_by") is not None
+            node_type = "segment" if is_segment else "folder"
 
             return {
                 "id": node["id"],
                 "name": node["question"],
                 "description": node["answer"],
                 "type": node_type,
-                "content_type": node.get("content_type"),  # "video" for folders, various for transcripts
+                "content_type": node.get("content_type"),  # "video" for folders, "manual" for markdown, etc
                 "hierarchy_level": node["hierarchy_level"],
-                "is_leaf": is_transcript,  # Transcripts are leaf nodes (have timecode)
+                "is_leaf": is_segment,  # Segments are leaf nodes (hierarchy level 4)
                 "children": children,
                 "metadata": {
                     "media_url": node.get("media_url"),
