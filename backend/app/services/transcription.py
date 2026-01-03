@@ -9,6 +9,7 @@ from datetime import timedelta, date
 import openai
 from app.core.config import settings
 from app.services.content_manager import generate_dual_embeddings
+from app.services.llm_adapters import get_adapter
 from supabase import Client
 
 
@@ -19,6 +20,79 @@ class TranscriptionService:
         self.openai_client = openai.OpenAI(api_key=settings.openai_api_key)
         # Cost per minute for Whisper API
         self.whisper_cost_per_minute = 0.006
+
+    async def generate_segment_tags(
+        self,
+        segment_text: str,
+        lesson_name: str = "",
+        course_name: str = "",
+        provider: str = "gemini"
+    ) -> List[str]:
+        """
+        Generate 3-5 relevant tags for a transcript segment using AI
+
+        Args:
+            segment_text: The transcript segment text
+            lesson_name: Name of the lesson
+            course_name: Name of the course
+            provider: LLM provider to use
+
+        Returns:
+            List of generated tags (3-5 items)
+        """
+        adapter = get_adapter(provider)
+
+        # Limit text length to avoid token limits
+        text_preview = segment_text[:500] if len(segment_text) > 500 else segment_text
+
+        system_prompt = """You are a content tagging expert. Generate 3-5 relevant tags for this course transcript segment.
+
+Focus on:
+- Main topics discussed
+- Tools, platforms, or software mentioned
+- Key concepts or techniques
+- Actionable skills taught
+
+Return ONLY comma-separated tags in lowercase, like: facebook ads, targeting, audience building, lookalike audiences
+
+Keep tags concise (1-3 words each) and relevant."""
+
+        user_prompt = f"""Course: {course_name}
+Lesson: {lesson_name}
+
+Transcript Segment:
+{text_preview}
+
+Generate 3-5 relevant tags:"""
+
+        try:
+            # Generate tags using LLM
+            response, metadata = await adapter.generate_answer(
+                query=user_prompt,
+                context="",
+                system_prompt=system_prompt,
+                max_tokens=50  # Short response
+            )
+
+            # Parse tags from response
+            tags_text = response.strip().lower()
+
+            # Clean up response (remove any explanations)
+            if '\n' in tags_text:
+                tags_text = tags_text.split('\n')[0]
+
+            # Split by comma and clean
+            tags = [tag.strip() for tag in tags_text.split(',') if tag.strip()]
+
+            # Limit to 5 tags max
+            tags = tags[:5]
+
+            return tags
+
+        except Exception as e:
+            print(f"Error generating tags: {e}")
+            # Return empty tags on error rather than failing
+            return []
 
     async def transcribe_video(
         self,
@@ -258,8 +332,20 @@ class TranscriptionService:
                 question_text = f"Content from {lesson_name}"
                 content_type = "manual"  # Use 'manual' as it's allowed by DB constraint
 
-            # Generate dual embeddings
-            openai_embedding, gemini_embedding = await generate_dual_embeddings(context_text)
+            # Generate AI tags for the segment
+            tags = await self.generate_segment_tags(
+                segment_text=segment["text"],
+                lesson_name=lesson_name,
+                course_name=course_name
+            )
+
+            # Generate dual embeddings (optionally include tags for better search)
+            if tags:
+                tags_text = ", ".join(tags)
+                enriched_context = f"{context_text}. Tags: {tags_text}"
+                openai_embedding, gemini_embedding = await generate_dual_embeddings(enriched_context)
+            else:
+                openai_embedding, gemini_embedding = await generate_dual_embeddings(context_text)
 
             # Create segment entry
             segment_data = {
@@ -271,6 +357,7 @@ class TranscriptionService:
                 "lesson_id": lesson_id,
                 "question": question_text,
                 "answer": segment["text"],
+                "tags": tags,  # Add AI-generated tags
                 "media_url": video_url if video_url else None,
                 "timecode_start": start_time,
                 "timecode_end": end_time,
