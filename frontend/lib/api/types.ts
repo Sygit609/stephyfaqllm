@@ -36,6 +36,7 @@ export interface SearchRequest {
   query: string
   provider?: "gemini" | "openai"
   limit?: number
+  admin_input?: string
 }
 
 export interface SearchResponse {

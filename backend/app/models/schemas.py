@@ -21,6 +21,7 @@ class SearchRequest(BaseModel):
         "gemini", description="Model provider: 'gemini' or 'openai'"
     )
     limit: Optional[int] = Field(5, description="Maximum number of results")
+    admin_input: Optional[str] = Field(None, description="Optional admin guidance for search behavior")
 
 
 class SourceMatch(BaseModel):

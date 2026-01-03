@@ -76,7 +76,8 @@ async def search_knowledge_base(request: SearchRequest):
         sources = await search.hybrid_search(
             query=request.query,
             provider=request.provider or settings.default_model_provider,
-            limit=request.limit or settings.default_search_limit
+            limit=request.limit or settings.default_search_limit,
+            admin_input=request.admin_input
         )
 
         # Classify intent (optional for search-only)
@@ -99,7 +100,14 @@ async def search_knowledge_base(request: SearchRequest):
                 date=s.get("date"),
                 source_url=s.get("source_url"),
                 score=s["score"],
-                match_type=s["match_type"]
+                match_type=s["match_type"],
+                content_type=s.get("content_type"),
+                course_id=s.get("course_id"),
+                module_id=s.get("module_id"),
+                lesson_id=s.get("lesson_id"),
+                media_url=s.get("media_url"),
+                timecode_start=s.get("timecode_start"),
+                timecode_end=s.get("timecode_end")
             )
             for s in sources
         ]

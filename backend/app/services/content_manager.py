@@ -23,6 +23,15 @@ async def generate_dual_embeddings(text: str) -> tuple[List[float], List[float]]
     openai_adapter = get_adapter("openai")
     gemini_adapter = get_adapter("gemini")
 
+    # Truncate text if too long (OpenAI limit: 8192 tokens)
+    # Estimate: 1 token ≈ 4 characters
+    # Use 6000 token limit (24000 chars) to be safe
+    MAX_CHARS = 24000
+    if len(text) > MAX_CHARS:
+        original_len = len(text)
+        text = text[:MAX_CHARS] + "... [truncated]"
+        print(f"Warning: Text truncated from {original_len} to {MAX_CHARS} chars for embedding")
+
     # Generate embeddings in parallel
     import asyncio
 

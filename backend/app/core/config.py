@@ -46,6 +46,9 @@ class Settings(BaseSettings):
     hybrid_search_fulltext_weight: float = 0.3
     web_search_threshold: float = 0.7  # Use web search if best score < this
     default_search_limit: int = 5
+    vector_search_batch_limit: int = 100  # Max results per vector search
+    ivfflat_probes: int = 10  # IVFFlat accuracy tuning (1-100, higher = more accurate)
+    enable_llm_reranking: bool = Field(True, env="ENABLE_LLM_RERANKING")  # Enable LLM-based search reranking
 
     # API Configuration
     cors_origins: list = ["http://localhost:3000", "http://localhost:3001", "http://localhost:3002", "http://localhost:8000"]
