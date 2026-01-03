@@ -2439,3 +2439,107 @@ Used by Perplexity, You.com, and other AI-first search engines. This positions t
 - Ready to commit and push
 
 **Session end:** January 3, 2026
+
+---
+## 2026-01-03 (Session 2) - Tab Split + AI Tagging + Collapsible Results
+
+### Overview
+Major UX improvements to the search page: split Course Transcripts tab into separate Course and Coaching tabs, added AI-powered tagging to all transcript segments, and implemented collapsible lesson grouping for cleaner search results.
+
+### Features Implemented
+
+#### 1. Tab Split: Course vs Coaching
+**Problem:** All transcripts (Online Income Lab course + Coaching Call Replays) were mixed in one "Course Transcripts" tab.
+
+**Solution:** Split into 4 separate tabs:
+- **Course** (blue) - Online Income Lab and future main courses
+- **Coaching** (purple) - Coaching Call Replays transcripts
+- **Facebook Posts** (green) - Q&A from Facebook group
+- **Web Results** (orange) - External search results
+
+**Implementation:**
+- Added course ID constants for categorization
+- Filter by `course_id` field on frontend
+- All 4 tabs always visible (per user request)
+- Auto-select first tab with content
+
+**Files Modified:**
+- `frontend/components/search/SourcesList.tsx`
+
+#### 2. AI-Powered Transcript Tagging
+**Problem:** Coaching transcripts had no tags, making search less accurate than Facebook posts.
+
+**Solution:** Generate 3-5 AI tags for each transcript segment.
+
+**Implementation:**
+- Created batch tagging script: `scripts/generate_transcript_tags.py`
+- Updated transcript upload to auto-generate tags for future uploads
+- Tags included in embeddings for better vector search
+- Tags displayed as purple pills in UI
+
+**Tags Generated:**
+- Total: 1,144 transcript segments tagged
+- Coaching Call Replays: 1,031 segments
+- Online Income Lab: 106 segments
+- Cost: ~$0.15 (OpenAI GPT-4o-mini)
+
+**Example Tags:**
+- DM automation segment → `dm automation, messaging, content quality, video hooks`
+- Finance segment → `entrepreneur finance, 1099 forms, business expenses, tax accountant`
+
+**Files Modified:**
+- `backend/app/services/transcription.py` - Added `generate_segment_tags()` method
+- `scripts/generate_transcript_tags.py` - Batch tagging script (new)
+- `docs/TRANSCRIPT_TAGGING.md` - Documentation (new)
+
+#### 3. Collapsible Lesson Grouping
+**Problem:** Searching "email" returned 60+ individual segments from Nathan Ramos's email lesson, pushing other results way down.
+
+**Solution:** Group segments by lesson into collapsible cards.
+
+**Before:** 60 separate cards for same lesson
+**After:** 1 card showing "Nathan Ramos - Email Deliverability (60 segments)" with expand/collapse
+
+**Implementation:**
+- Group sources by `lesson_id`
+- Show summary: lesson name + segment count + best match % + combined tags
+- Click to expand and see individual segments sorted by relevance
+- Each segment shows timestamp link to jump to that point in video
+
+**Files Modified:**
+- `frontend/components/search/CourseSourcesTab.tsx` - Complete rewrite with grouping logic
+
+### Technical Details
+
+**Course IDs for Tab Categorization:**
+```javascript
+const ONLINE_INCOME_LAB_ID = "233efed3-6f20-4f9c-a15a-1b3ee17118dd"
+const COACHING_CALL_REPLAYS_ID = "a75dc54a-da4b-4229-8699-8a46b2132ef7"
+```
+
+**Tag Generation Command:**
+```bash
+PYTHONPATH=backend python3 scripts/generate_transcript_tags.py --provider openai
+```
+
+**Servers:**
+- Backend: http://localhost:8001
+- Frontend: http://localhost:3002
+
+### Files Changed This Session
+
+**New Files:**
+- `scripts/generate_transcript_tags.py` - Batch tag generation script
+- `docs/TRANSCRIPT_TAGGING.md` - Tagging documentation
+
+**Modified Files:**
+- `frontend/components/search/SourcesList.tsx` - Tab split (Course/Coaching/Facebook/Web)
+- `frontend/components/search/CourseSourcesTab.tsx` - Collapsible lesson grouping + tags display
+- `backend/app/services/transcription.py` - Auto-tagging on upload
+
+### User Quotes
+- "amazing" (on seeing collapsible lesson grouping)
+- Asked about search performance impact → explained client-side grouping is instant
+
+### Session End
+January 3, 2026 (evening)
