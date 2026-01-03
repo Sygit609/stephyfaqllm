@@ -17,6 +17,19 @@ export interface SourceMatch {
   source_url: string | null
   score: number
   match_type: "vector" | "fulltext" | "hybrid"
+
+  // Source type differentiation for tabs
+  content_type?: "video" | "manual" | "facebook" | "screenshot" | "qa"
+
+  // Course context for filtering
+  course_id?: string | null
+  module_id?: string | null
+  lesson_id?: string | null
+
+  // Video metadata for "View Source" links
+  media_url?: string | null
+  timecode_start?: number | null  // seconds
+  timecode_end?: number | null    // seconds
 }
 
 export interface SearchRequest {

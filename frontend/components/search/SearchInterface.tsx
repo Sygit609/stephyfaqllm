@@ -15,10 +15,15 @@ import { useQuery } from "@/lib/hooks/useQuery"
 import type { ModelProvider } from "@/lib/api/types"
 
 export function SearchInterface() {
+  const INITIAL_LIMIT = 10  // Increased from 5
+  const INCREMENT = 10      // Load +10 more each click
+
   const [queryText, setQueryText] = useState("")
   const [adminInput, setAdminInput] = useState("")
   const [selectedProvider, setSelectedProvider] = useState<ModelProvider>("openai")
   const [searchState, setSearchState] = useState<"initial" | "answer">("initial")
+  const [currentLimit, setCurrentLimit] = useState(INITIAL_LIMIT)
+  const [isLoadingMore, setIsLoadingMore] = useState(false)
 
   const { data, isLoading, error, executeQuery } = useQuery()
 
@@ -26,10 +31,12 @@ export function SearchInterface() {
     e.preventDefault()
     if (!queryText.trim()) return
 
+    setCurrentLimit(INITIAL_LIMIT)  // Reset to 10 on new search
+
     await executeQuery({
       query: queryText.trim(),
       provider: selectedProvider,
-      search_limit: 5,
+      search_limit: INITIAL_LIMIT,
       use_web_search: true,
       admin_input: adminInput.trim() || undefined,
     })
@@ -41,6 +48,7 @@ export function SearchInterface() {
     setQueryText("")
     setAdminInput("")
     setSearchState("initial")
+    setCurrentLimit(INITIAL_LIMIT)
   }
 
   const handleRefineAnswer = async (e: React.FormEvent) => {
@@ -50,10 +58,26 @@ export function SearchInterface() {
     await executeQuery({
       query: queryText.trim(),
       provider: selectedProvider,
-      search_limit: 5,
+      search_limit: currentLimit,  // Use current limit for refinement
       use_web_search: true,
       admin_input: adminInput.trim() || undefined,
     })
+  }
+
+  const handleViewMore = async () => {
+    setIsLoadingMore(true)
+    const newLimit = currentLimit + INCREMENT
+
+    await executeQuery({
+      query: queryText.trim(),
+      provider: selectedProvider,
+      search_limit: newLimit,
+      use_web_search: true,
+      admin_input: adminInput.trim() || undefined,
+    })
+
+    setCurrentLimit(newLimit)
+    setIsLoadingMore(false)
   }
 
   return (
@@ -185,6 +209,31 @@ export function SearchInterface() {
               sources={data.sources}
               webResults={data.web_results}
             />
+          )}
+
+          {/* View More Button */}
+          {data.sources && data.sources.length >= currentLimit && (
+            <div className="bg-white rounded-lg shadow-md p-4">
+              <button
+                onClick={handleViewMore}
+                disabled={isLoadingMore || isLoading}
+                className="w-full py-3 border-2 border-blue-600 text-blue-600 rounded-lg hover:bg-blue-50 disabled:opacity-50 disabled:cursor-not-allowed font-medium transition-colors"
+              >
+                {isLoadingMore ? (
+                  <span className="flex items-center justify-center gap-2">
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Loading more results...
+                  </span>
+                ) : (
+                  `View More Results (+${INCREMENT})`
+                )}
+              </button>
+
+              <div className="text-sm text-gray-600 mt-3 text-center">
+                Showing {data.sources.length} result{data.sources.length !== 1 ? 's' : ''}
+                {data.sources.length < currentLimit && ' (all available)'}
+              </div>
+            </div>
           )}
         </div>
       )}

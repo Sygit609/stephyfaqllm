@@ -1,155 +1,136 @@
 "use client"
 
 /**
- * Sources List Component
- * Displays internal KB sources and web results
+ * Sources List Component with Tabs
+ * Separates Course Transcripts, Facebook Posts, and Web Results into tabs
  */
 
-import { ExternalLink, FileText, Globe } from "lucide-react"
+import { useState } from "react"
+import { Video, MessageCircle, Globe } from "lucide-react"
 import type { SourceMatch, WebResult } from "@/lib/api/types"
+import { CourseSourcesTab } from "./CourseSourcesTab"
+import { FacebookSourcesTab } from "./FacebookSourcesTab"
+import { WebResultsTab } from "./WebResultsTab"
 
 interface SourcesListProps {
   sources: SourceMatch[]
   webResults?: WebResult[] | null
 }
 
+type TabType = "course" | "facebook" | "web"
+
 export function SourcesList({ sources, webResults }: SourcesListProps) {
+  // Default to Course Transcripts tab
+  const [activeTab, setActiveTab] = useState<TabType>("course")
+
+  // Deduplicate sources by content hash (question + answer + timecode)
+  // This handles cases where the DB has duplicate content with different IDs
+  const uniqueSources = sources.filter((source, index, self) => {
+    const contentKey = (s: SourceMatch) => {
+      // For video/course content, use question + timecode as unique key
+      if (s.timecode_start !== undefined && s.timecode_start !== null) {
+        return `${s.question}|${s.timecode_start}|${s.timecode_end || ''}`
+      }
+      // For non-video content, use question + answer as unique key
+      return `${s.question}|${s.answer}`
+    }
+
+    return index === self.findIndex((s) => contentKey(s) === contentKey(source))
+  })
+
+  // Categorize sources by type
+  // Course sources: video or manual content with course_id
+  const courseSources = uniqueSources.filter(
+    (s) => s.content_type === "video" || s.content_type === "manual" || s.course_id != null
+  )
+
+  // Facebook sources: explicitly facebook content, OR content without course association
+  const facebookSources = uniqueSources.filter(
+    (s) => s.content_type === "facebook" || (s.course_id == null && s.content_type !== "video" && s.content_type !== "manual")
+  )
+
+  const webResultsArray = webResults || []
+
+  // Determine which tabs have content
+  const hasCourse = courseSources.length > 0
+  const hasFacebook = facebookSources.length > 0
+  const hasWeb = webResultsArray.length > 0
+
+  // Auto-select first available tab with content
+  // This ensures we don't show an empty tab by default
+  const effectiveActiveTab =
+    activeTab === "course" && !hasCourse
+      ? hasFacebook
+        ? "facebook"
+        : hasWeb
+        ? "web"
+        : "course"
+      : activeTab === "facebook" && !hasFacebook
+      ? hasCourse
+        ? "course"
+        : hasWeb
+        ? "web"
+        : "facebook"
+      : activeTab === "web" && !hasWeb
+      ? hasCourse
+        ? "course"
+        : hasFacebook
+        ? "facebook"
+        : "web"
+      : activeTab
+
   return (
-    <div className="space-y-4">
-      {/* Internal Sources */}
-      {sources.length > 0 && (
-        <div className="bg-white rounded-lg shadow-md overflow-hidden">
-          <div className="bg-gray-50 px-6 py-3 border-b border-gray-200">
-            <div className="flex items-center gap-2">
-              <FileText className="w-5 h-5 text-gray-600" />
-              <h3 className="font-medium text-gray-900">
-                Knowledge Base Sources ({sources.length})
-              </h3>
-            </div>
-          </div>
+    <div className="bg-white rounded-lg shadow-md overflow-hidden">
+      {/* Tab Header */}
+      <div className="border-b border-gray-200 bg-gray-50">
+        <div className="flex">
+          {/* Course Transcripts Tab */}
+          <button
+            onClick={() => setActiveTab("course")}
+            className={`flex-1 px-6 py-3 font-medium text-sm transition-colors flex items-center justify-center gap-2 ${
+              effectiveActiveTab === "course"
+                ? "bg-white text-blue-600 border-b-2 border-blue-600"
+                : "text-gray-600 hover:text-gray-900 hover:bg-gray-100"
+            }`}
+          >
+            <Video className="w-4 h-4" />
+            Course Transcripts ({courseSources.length})
+          </button>
 
-          <div className="divide-y divide-gray-200">
-            {sources.map((source, idx) => (
-              <div key={source.id} className="px-6 py-4 hover:bg-gray-50 transition-colors">
-                {/* Source Header */}
-                <div className="flex items-start justify-between gap-4 mb-2">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-blue-100 text-blue-700 text-xs font-medium">
-                        {idx + 1}
-                      </span>
-                      <span className="text-xs text-gray-500">
-                        {source.match_type} · {(source.score * 100).toFixed(1)}% match
-                      </span>
-                    </div>
-                    <h4 className="font-medium text-gray-900 leading-snug">
-                      {source.question}
-                    </h4>
-                  </div>
-                </div>
+          {/* Facebook Posts Tab */}
+          <button
+            onClick={() => setActiveTab("facebook")}
+            className={`flex-1 px-6 py-3 font-medium text-sm transition-colors flex items-center justify-center gap-2 ${
+              effectiveActiveTab === "facebook"
+                ? "bg-white text-blue-600 border-b-2 border-blue-600"
+                : "text-gray-600 hover:text-gray-900 hover:bg-gray-100"
+            }`}
+          >
+            <MessageCircle className="w-4 h-4" />
+            Facebook Posts ({facebookSources.length})
+          </button>
 
-                {/* Answer */}
-                <p className="text-gray-700 text-sm leading-relaxed mb-3">
-                  {source.answer}
-                </p>
-
-                {/* Metadata */}
-                <div className="flex flex-wrap items-center gap-3 text-xs text-gray-500">
-                  {/* Category */}
-                  {source.category && (
-                    <span className="px-2 py-1 bg-gray-100 rounded">
-                      {source.category}
-                    </span>
-                  )}
-
-                  {/* Tags */}
-                  {source.tags && source.tags.length > 0 && (
-                    <div className="flex gap-1">
-                      {source.tags.slice(0, 3).map((tag) => (
-                        <span
-                          key={tag}
-                          className="px-2 py-1 bg-blue-50 text-blue-700 rounded"
-                        >
-                          {tag}
-                        </span>
-                      ))}
-                      {source.tags.length > 3 && (
-                        <span className="px-2 py-1 text-gray-400">
-                          +{source.tags.length - 3}
-                        </span>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Date */}
-                  {source.date && (
-                    <span>{new Date(source.date).toLocaleDateString()}</span>
-                  )}
-
-                  {/* Source Link */}
-                  {source.source_url && (
-                    <a
-                      href={source.source_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center gap-1 text-blue-600 hover:text-blue-700 hover:underline"
-                    >
-                      View source
-                      <ExternalLink className="w-3 h-3" />
-                    </a>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
+          {/* Web Results Tab */}
+          <button
+            onClick={() => setActiveTab("web")}
+            className={`flex-1 px-6 py-3 font-medium text-sm transition-colors flex items-center justify-center gap-2 ${
+              effectiveActiveTab === "web"
+                ? "bg-white text-green-600 border-b-2 border-green-600"
+                : "text-gray-600 hover:text-gray-900 hover:bg-gray-100"
+            }`}
+          >
+            <Globe className="w-4 h-4" />
+            Web Results ({webResultsArray.length})
+          </button>
         </div>
-      )}
+      </div>
 
-      {/* Web Results */}
-      {webResults && webResults.length > 0 && (
-        <div className="bg-white rounded-lg shadow-md overflow-hidden">
-          <div className="bg-gray-50 px-6 py-3 border-b border-gray-200">
-            <div className="flex items-center gap-2">
-              <Globe className="w-5 h-5 text-gray-600" />
-              <h3 className="font-medium text-gray-900">
-                Web Search Results ({webResults.length})
-              </h3>
-            </div>
-          </div>
-
-          <div className="divide-y divide-gray-200">
-            {webResults.map((result, idx) => (
-              <div key={idx} className="px-6 py-4 hover:bg-gray-50 transition-colors">
-                <a
-                  href={result.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="group"
-                >
-                  <div className="flex items-start gap-3">
-                    <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-green-100 text-green-700 text-xs font-medium flex-shrink-0">
-                      {idx + 1}
-                    </span>
-                    <div className="flex-1">
-                      <h4 className="font-medium text-blue-600 group-hover:text-blue-700 group-hover:underline mb-1">
-                        {result.title}
-                      </h4>
-                      <p className="text-gray-700 text-sm leading-relaxed mb-2">
-                        {result.content}
-                      </p>
-                      <div className="flex items-center gap-2 text-xs text-gray-500">
-                        <span className="truncate">{result.url}</span>
-                        <span>·</span>
-                        <span>{(result.score * 100).toFixed(0)}% relevance</span>
-                      </div>
-                    </div>
-                  </div>
-                </a>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+      {/* Tab Content */}
+      <div className="p-6">
+        {effectiveActiveTab === "course" && <CourseSourcesTab sources={courseSources} />}
+        {effectiveActiveTab === "facebook" && <FacebookSourcesTab sources={facebookSources} />}
+        {effectiveActiveTab === "web" && <WebResultsTab results={webResultsArray} />}
+      </div>
     </div>
   )
 }

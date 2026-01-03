@@ -248,7 +248,14 @@ async def query_with_search_and_answer(request: QueryRequest):
                 date=s.get("date"),
                 source_url=s.get("source_url"),
                 score=s["score"],
-                match_type=s["match_type"]
+                match_type=s["match_type"],
+                content_type=s.get("content_type"),
+                course_id=s.get("course_id"),
+                module_id=s.get("module_id"),
+                lesson_id=s.get("lesson_id"),
+                media_url=s.get("media_url"),
+                timecode_start=s.get("timecode_start"),
+                timecode_end=s.get("timecode_end")
             )
             for s in internal_sources
         ]

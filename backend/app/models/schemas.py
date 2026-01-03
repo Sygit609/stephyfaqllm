@@ -36,6 +36,19 @@ class SourceMatch(BaseModel):
     score: float = Field(..., description="Relevance score (0-1)")
     match_type: str = Field(..., description="'vector', 'fulltext', or 'hybrid'")
 
+    # Source type differentiation for tabs
+    content_type: Optional[str] = None
+
+    # Course context for filtering
+    course_id: Optional[str] = None
+    module_id: Optional[str] = None
+    lesson_id: Optional[str] = None
+
+    # Video metadata for "View Source" links
+    media_url: Optional[str] = None
+    timecode_start: Optional[int] = None  # seconds
+    timecode_end: Optional[int] = None    # seconds
+
 
 class SearchResponse(BaseModel):
     """Response from search endpoint"""

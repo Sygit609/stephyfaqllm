@@ -2134,3 +2134,55 @@ User: "good, save my work, update the claude-history.md and commit and push to m
 - Consider migrating to pgvector native search when DB grows beyond 5000 items
 
 **Session end:** January 2, 2026
+
+---
+## 2026-01-03 (Fix Duplicate Search Results)
+**Prompt:** User reported duplicate search results appearing in the knowledge base source tabs. The same content was appearing multiple times (e.g., items 1 & 2 were duplicates, items 3-6 were duplicates, items 7-9 were duplicates).
+
+**Root Cause Analysis:**
+1. **Missing metadata in API response**: The `/api/query` endpoint was not sending critical fields (`content_type`, `course_id`, `module_id`, `lesson_id`, `media_url`, `timecode_start`, `timecode_end`) from search results to frontend
+2. **Weak deduplication logic**: Frontend was only deduplicating by `id`, but the database contains duplicate content with different IDs (likely from multiple imports of the same course material)
+
+**Actions taken:**
+
+1. **Backend Fix** (endpoints.py:241-260):
+   - Updated `query_with_search_and_answer` endpoint to include all metadata fields when creating SourceMatch objects
+   - Now properly sends content_type, course_id, module_id, lesson_id, media_url, timecode_start, timecode_end to frontend
+   - This enables proper categorization and deduplication
+
+2. **Frontend Fix** (SourcesList.tsx:26-39):
+   - Replaced simple ID-based deduplication with content-based hashing
+   - For video/course content: Uses `question + timecode_start + timecode_end` as unique key
+   - For non-video content: Uses `question + answer` as unique key
+   - This ensures duplicate content with different IDs gets filtered out
+
+3. **Tab Separation Enhancement**:
+   - Created separate tab components (CourseSourcesTab, FacebookSourcesTab, WebResultsTab)
+   - Improved categorization logic to properly separate course vs Facebook content
+   - Course sources: Identified by content_type="video"|"manual" OR presence of course_id
+   - Facebook sources: Identified by content_type="facebook" OR absence of course_id
+
+**Files modified:**
+- backend/app/api/endpoints.py (added metadata fields to SourceMatch)
+- frontend/components/search/SourcesList.tsx (content-based deduplication + tabs)
+
+**Files created:**
+- frontend/components/search/CourseSourcesTab.tsx
+- frontend/components/search/FacebookSourcesTab.tsx
+- frontend/components/search/WebResultsTab.tsx
+
+**Testing:**
+- ✅ Frontend build succeeded with no TypeScript errors
+- ✅ Both servers running (backend: 8001, frontend: 3002)
+
+**Expected Results:**
+- No duplicate results in any tab
+- Course transcript sources properly categorized in "Course Transcripts" tab
+- Facebook posts properly categorized in "Facebook Posts" tab
+- Each unique piece of content appears only once
+
+**Both servers running:**
+- Backend: http://localhost:8001
+- Frontend: http://localhost:3002
+
+**Session end:** January 3, 2026
