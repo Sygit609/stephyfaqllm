@@ -30,6 +30,7 @@ from app.services.content_manager import generate_dual_embeddings
 SRT_FOLDER = "/Users/chenweisun/Documents/Stephy OIL Path B subtitles"
 COURSE_ID = "233efed3-6f20-4f9c-a15a-1b3ee17118dd"
 COURSE_NAME = "Online Income Lab"
+PATH_B_PARENT_ID = "024d5f58-b26d-4c70-b113-e831ac00960a"  # Path-B-Owner-Mode
 
 # Module names based on typical course structure
 MODULE_NAMES = {
@@ -100,8 +101,9 @@ async def create_module(db, course_id: str, module_num: int) -> str:
 
     module_data = {
         "content_type": "video",
-        "hierarchy_level": 2,  # Module level
+        "hierarchy_level": 3,  # Module level (under Path-B which is level 2)
         "course_id": course_id,
+        "parent_id": PATH_B_PARENT_ID,  # Nest under Path-B-Owner-Mode
         "question": module_name,
         "answer": f"Module {module_num} of {COURSE_NAME} Path B",
         "date": date.today().isoformat(),

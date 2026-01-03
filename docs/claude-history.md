@@ -2599,3 +2599,34 @@ Uploaded 70 SRT transcript files from Path B of Online Income Lab course with AI
 
 ### Session End
 January 3, 2026 (late evening)
+
+---
+## 2026-01-03 (Video URLs Added to Path B Lessons)
+
+### Overview
+Added video URLs to all 70 Path B lessons so users can click through to the original course videos from search results.
+
+### Data Source
+User provided a PDF mapping each SRT filename to its corresponding video URL on the course platform (onlineincomelab.stephychen.com).
+
+### Implementation
+Created `scripts/add_video_urls_to_lessons.py`:
+- Maps (module_num, video_num) to video URL
+- Queries lessons by parent_id (module) and hierarchy_level (4)
+- Extracts video number from lesson name (e.g., "01 - Module 1 Preview")
+- Updates `media_url` field for each lesson
+
+### Results
+- **70 lessons updated** with video URLs
+- All 6 modules covered
+- URLs now appear in Course tab search results with "Watch" button
+
+### Database Field
+- Field updated: `media_url` in `knowledge_items` table
+- Scope: Lessons only (segments inherit URL from parent when displayed)
+
+### Files Created
+- `scripts/add_video_urls_to_lessons.py` - Bulk URL update script with all 70 URL mappings
+
+### Session End
+January 3, 2026 (night)
