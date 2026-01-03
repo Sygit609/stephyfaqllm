@@ -26,7 +26,7 @@ class TranscriptionService:
         segment_text: str,
         lesson_name: str = "",
         course_name: str = "",
-        provider: str = "gemini"
+        provider: str = "openai"
     ) -> List[str]:
         """
         Generate 3-5 relevant tags for a transcript segment using AI

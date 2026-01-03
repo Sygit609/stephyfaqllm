@@ -2543,3 +2543,59 @@ PYTHONPATH=backend python3 scripts/generate_transcript_tags.py --provider openai
 
 ### Session End
 January 3, 2026 (evening)
+
+---
+## 2026-01-03 (Path B Transcript Upload)
+
+### Overview
+Uploaded 70 SRT transcript files from Path B of Online Income Lab course with AI-powered auto-tagging.
+
+### Files Uploaded
+
+**Source folder:** `/Users/chenweisun/Documents/Stephy OIL Path B subtitles`
+
+**File naming pattern:** `BM{module}_{video}_{lesson_name}.srt`
+- B = Path B
+- M = Module number
+- Example: `BM1_02_Lesson 1.srt` = Path B, Module 1, Video 2, "Lesson 1"
+
+### Results
+
+| Module | Name | Lessons | Segments |
+|--------|------|---------|----------|
+| 1 | Course Creation | 16 | 66 |
+| 2 | Automation Alchemy | 13 | 110 |
+| 3 | Traffic Generation | 5 | 32 |
+| 4 | Content Creation | 22 | 148 |
+| 5 | Launch Strategy | 11 | 105 |
+| 6 | Mindset & Growth | 3 | 19 |
+| **Total** | | **70** | **479** |
+
+**Database IDs:**
+- Module 1: `12cfb10f-8443-4e90-ae38-1fa1bb8ca271`
+- Module 2: `ebe8c103-8a89-4696-8dcf-70e9d4730cc4`
+- Module 3: `9f1c13e8-f22a-4915-841f-99f14dfb35d7`
+- Module 4: `7eba1cb3-326a-4834-ac8f-7b818a518c53`
+- Module 5: `9b512d90-257c-4b80-9e0c-084c0114fe41`
+- Module 6: `82432e48-8d4d-4a42-85cd-08fd7fb3f209`
+
+### Technical Notes
+
+**Issue encountered:** Initial script used Gemini for tagging which hit quota limits.
+
+**Fix:** Changed default tagging provider from `gemini` to `openai` in:
+- `backend/app/services/transcription.py:29`
+
+**Script modifications:**
+- Added unbuffered output (`print = partial(print, flush=True)`) to see progress in real-time
+
+**Upload script location:** `scripts/upload_path_b_transcripts.py`
+
+### Files Changed This Session
+
+**Modified:**
+- `backend/app/services/transcription.py` - Changed default tag provider to openai
+- `scripts/upload_path_b_transcripts.py` - Added flush for unbuffered output
+
+### Session End
+January 3, 2026 (late evening)
