@@ -2630,3 +2630,48 @@ Created `scripts/add_video_urls_to_lessons.py`:
 
 ### Session End
 January 3, 2026 (night)
+
+---
+## 2026-01-04 (Search Fixes, UI Cleanup, Deployment Prep)
+
+### Issues Identified & Fixed
+
+**1. Duplicate Modules in Path B**
+- **Problem:** Upload script created NEW Module 1-6 instead of adding to existing ones
+- **Solution:** Deleted original empty modules (Module-1-Craft-Offers, etc.), kept new ones with transcripts
+- **Deleted IDs:** aa5b1057, b15c8fa8, 82ccb144, f9905f89, f95af98b, 76ca67c5
+
+**2. Gemini API Quota Exhausted**
+- **Problem:** Search returning wrong results because Gemini quota hit, fallback to OpenAI embeddings didn't match
+- **Solution:** User added billing-enabled Gemini API key to `.env`
+- **Key insight:** Gemini embeddings perform much better for this content than OpenAI
+
+**3. Video Links Not Showing in Search Results**
+- **Problem:** Segments had empty `media_url` (URLs were on lessons only)
+- **Solution:** Propagated `media_url` from lessons to all 479 child segments
+
+**4. Cost Display Hidden**
+- **Problem:** User didn't want `$0.0112` cost shown to end users
+- **Solution:** Commented out cost display in `AnswerDisplay.tsx`
+
+### Deployment Configuration Created
+
+**Files created for Vercel + Railway hosting:**
+- `backend/railway.json` - Railway deployment config
+- `backend/Procfile` - `web: uvicorn app.main:app --host 0.0.0.0 --port $PORT`
+- `backend/.env.example` - Environment variable template
+- `frontend/.env.example` - Frontend env template
+
+**CORS updated:**
+- `backend/app/core/config.py` - Made `cors_origins` configurable via `CORS_ORIGINS` env var
+
+### Server Ports
+- Backend: http://localhost:8001
+- Frontend: http://localhost:3002
+
+### Files Modified
+- `frontend/components/search/AnswerDisplay.tsx` - Hidden cost display
+- `backend/app/core/config.py` - CORS_ORIGINS from env
+
+### Session End
+January 4, 2026

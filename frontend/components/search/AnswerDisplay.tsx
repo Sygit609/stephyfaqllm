@@ -6,7 +6,7 @@
  */
 
 import { useState } from "react"
-import { Clock, DollarSign, MessageSquare, Zap, Globe, Calendar, Copy, Check } from "lucide-react"
+import { Clock, MessageSquare, Zap, Globe, Calendar, Copy, Check } from "lucide-react"
 import type { AnswerMetadata } from "@/lib/api/types"
 
 interface AnswerDisplayProps {
@@ -110,11 +110,11 @@ export function AnswerDisplay({
             <span>{(metadata.latency_ms / 1000).toFixed(2)}s</span>
           </div>
 
-          {/* Cost */}
-          <div className="flex items-center gap-1.5">
+          {/* Cost - Hidden from users */}
+          {/* <div className="flex items-center gap-1.5">
             <DollarSign className="w-4 h-4" />
             <span>${metadata.cost_usd.toFixed(4)}</span>
-          </div>
+          </div> */}
 
           {/* Tokens */}
           <div className="flex items-center gap-1.5 text-gray-500">
