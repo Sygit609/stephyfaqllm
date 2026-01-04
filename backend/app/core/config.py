@@ -5,55 +5,66 @@ Loads and validates environment variables
 
 import os
 from typing import Optional
-from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
-class Settings(BaseSettings):
+class Settings:
     """Application settings loaded from environment variables"""
 
-    model_config = SettingsConfigDict(
-        env_file=".env",
-        env_file_encoding="utf-8",
-        case_sensitive=False,
-        extra="ignore"
-    )
+    def __init__(self):
+        # API Keys - read directly from os.environ
+        self.openai_api_key: str = os.environ.get("OPENAI_API_KEY", "")
+        self.google_api_key: str = os.environ.get("GOOGLE_API_KEY", "")
+        self.supabase_url: str = os.environ.get("SUPABASE_URL", "")
+        self.supabase_key: str = os.environ.get("SUPABASE_KEY", "")
+        self.tavily_api_key: Optional[str] = os.environ.get("TAVILY_API_KEY")
 
-    # API Keys
-    openai_api_key: str
-    google_api_key: str
-    supabase_url: str
-    supabase_key: str
-    tavily_api_key: Optional[str] = None
+        # Validate required keys
+        missing = []
+        if not self.openai_api_key:
+            missing.append("OPENAI_API_KEY")
+        if not self.google_api_key:
+            missing.append("GOOGLE_API_KEY")
+        if not self.supabase_url:
+            missing.append("SUPABASE_URL")
+        if not self.supabase_key:
+            missing.append("SUPABASE_KEY")
 
-    # Application Config
-    default_model_provider: str = "gemini"
-    environment: str = "development"
+        if missing:
+            raise ValueError(f"Missing required environment variables: {', '.join(missing)}")
 
-    # Model Specifications
-    openai_embedding_model: str = "text-embedding-3-small"
-    openai_embedding_dims: int = 1536
-    openai_generation_model: str = "gpt-4o"
+        # Application Config
+        self.default_model_provider: str = os.environ.get("DEFAULT_MODEL_PROVIDER", "gemini")
+        self.environment: str = os.environ.get("ENVIRONMENT", "development")
 
-    gemini_embedding_model: str = "models/text-embedding-004"
-    gemini_embedding_dims: int = 768
-    gemini_generation_model: str = "gemini-2.0-flash-exp"
+        # Model Specifications
+        self.openai_embedding_model: str = "text-embedding-3-small"
+        self.openai_embedding_dims: int = 1536
+        self.openai_generation_model: str = "gpt-4o"
 
-    # Cost per 1K tokens (USD)
-    openai_input_cost: float = 0.0025  # gpt-4o
-    openai_output_cost: float = 0.01  # gpt-4o
-    openai_embedding_cost: float = 0.00002  # text-embedding-3-small
+        self.gemini_embedding_model: str = "models/text-embedding-004"
+        self.gemini_embedding_dims: int = 768
+        self.gemini_generation_model: str = "gemini-2.0-flash-exp"
 
-    # Search Configuration
-    hybrid_search_vector_weight: float = 0.7
-    hybrid_search_fulltext_weight: float = 0.3
-    web_search_threshold: float = 0.7  # Use web search if best score < this
-    default_search_limit: int = 5
-    vector_search_batch_limit: int = 100  # Max results per vector search
-    ivfflat_probes: int = 10  # IVFFlat accuracy tuning (1-100, higher = more accurate)
-    enable_llm_reranking: bool = True
+        # Cost per 1K tokens (USD)
+        self.openai_input_cost: float = 0.0025  # gpt-4o
+        self.openai_output_cost: float = 0.01  # gpt-4o
+        self.openai_embedding_cost: float = 0.00002  # text-embedding-3-small
 
-    # API Configuration - CORS origins from env or defaults
-    cors_origins: list = ["http://localhost:3000", "http://localhost:3001", "http://localhost:3002", "http://localhost:8000"]
+        # Search Configuration
+        self.hybrid_search_vector_weight: float = 0.7
+        self.hybrid_search_fulltext_weight: float = 0.3
+        self.web_search_threshold: float = 0.7  # Use web search if best score < this
+        self.default_search_limit: int = 5
+        self.vector_search_batch_limit: int = int(os.environ.get("VECTOR_SEARCH_BATCH_LIMIT", "100"))
+        self.ivfflat_probes: int = int(os.environ.get("IVFFLAT_PROBES", "10"))
+        self.enable_llm_reranking: bool = os.environ.get("ENABLE_LLM_RERANKING", "true").lower() == "true"
+
+        # API Configuration - CORS origins from env or defaults
+        cors_env = os.environ.get("CORS_ORIGINS", "")
+        if cors_env:
+            self.cors_origins: list = [x.strip() for x in cors_env.split(",")]
+        else:
+            self.cors_origins: list = ["http://localhost:3000", "http://localhost:3001", "http://localhost:3002", "http://localhost:8000"]
 
 
 # Global settings instance
