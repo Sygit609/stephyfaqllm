@@ -2675,3 +2675,69 @@ January 3, 2026 (night)
 
 ### Session End
 January 4, 2026
+
+---
+## 2026-01-04 (Production Deployment - Railway + Vercel)
+
+### Overview
+Successfully deployed the OIL Q&A Search Tool to production with:
+- **Frontend:** Vercel - https://stephyfaqllm.vercel.app
+- **Backend:** Railway - https://stephyfaqllm-production.up.railway.app
+
+### Deployment Challenges & Solutions
+
+**1. Railway Environment Variables Not Reading**
+- **Problem:** pydantic-settings wasn't reading Railway env vars (showed `input_value={}`)
+- **Attempts:** Updated pydantic-settings syntax, tried SettingsConfigDict
+- **Solution:** Replaced pydantic-settings with plain `os.environ.get()` in config.py
+
+**2. Missing python-multipart**
+- **Problem:** FastAPI form data endpoints require python-multipart
+- **Solution:** Added `python-multipart==0.0.9` to requirements.txt
+
+**3. Next.js Security Vulnerability**
+- **Problem:** Vercel rejected deployment due to CVE-2025-66478 in Next.js 15.1.3
+- **Solution:** Updated Next.js to latest version
+
+### Configuration Changes
+
+**backend/app/core/config.py** - Complete rewrite to use os.environ:
+```python
+class Settings:
+    def __init__(self):
+        self.openai_api_key = os.environ.get("OPENAI_API_KEY", "")
+        # ... validates and raises if missing
+```
+
+**backend/requirements.txt** - Added:
+```
+python-multipart==0.0.9
+```
+
+**frontend/package.json** - Updated Next.js to patched version
+
+### Railway Variables Required
+- `OPENAI_API_KEY`
+- `GOOGLE_API_KEY`
+- `SUPABASE_URL`
+- `SUPABASE_KEY`
+- `CORS_ORIGINS` = `https://stephyfaqllm.vercel.app`
+
+### Vercel Variables Required
+- `NEXT_PUBLIC_API_URL` = `https://stephyfaqllm-production.up.railway.app`
+
+### Key Lesson Learned
+**Deploy early in projects!** Setting up deployment on day 1 with a minimal app catches infrastructure issues (env vars, missing packages, CORS) before the codebase is complex.
+
+### Live URLs
+- Frontend: https://stephyfaqllm.vercel.app
+- Backend API: https://stephyfaqllm-production.up.railway.app
+- API Docs: https://stephyfaqllm-production.up.railway.app/docs
+
+### Files Modified
+- `backend/app/core/config.py` - Switched to os.environ from pydantic-settings
+- `backend/requirements.txt` - Added python-multipart
+- `frontend/package.json` - Updated Next.js
+
+### Session End
+January 4, 2026 (afternoon)
