@@ -5,12 +5,7 @@ Loads and validates environment variables
 
 import os
 from typing import Optional
-from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from dotenv import load_dotenv
-
-# Load .env from project root
-load_dotenv()
 
 
 class Settings(BaseSettings):
@@ -18,11 +13,12 @@ class Settings(BaseSettings):
 
     model_config = SettingsConfigDict(
         env_file=".env",
+        env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore"
     )
 
-    # API Keys - pydantic-settings v2 uses field names (uppercased) as env var names
+    # API Keys
     openai_api_key: str
     google_api_key: str
     supabase_url: str
