@@ -6,7 +6,7 @@ Loads and validates environment variables
 import os
 from typing import Optional
 from pydantic import Field
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from dotenv import load_dotenv
 
 # Load .env from project root
@@ -16,16 +16,22 @@ load_dotenv()
 class Settings(BaseSettings):
     """Application settings loaded from environment variables"""
 
-    # API Keys
-    openai_api_key: str = Field(..., env="OPENAI_API_KEY")
-    google_api_key: str = Field(..., env="GOOGLE_API_KEY")
-    supabase_url: str = Field(..., env="SUPABASE_URL")
-    supabase_key: str = Field(..., env="SUPABASE_KEY")
-    tavily_api_key: Optional[str] = Field(None, env="TAVILY_API_KEY")
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        case_sensitive=False,
+        extra="ignore"
+    )
+
+    # API Keys - pydantic-settings v2 uses field names (uppercased) as env var names
+    openai_api_key: str
+    google_api_key: str
+    supabase_url: str
+    supabase_key: str
+    tavily_api_key: Optional[str] = None
 
     # Application Config
-    default_model_provider: str = Field("gemini", env="DEFAULT_MODEL_PROVIDER")
-    environment: str = Field("development", env="ENVIRONMENT")
+    default_model_provider: str = "gemini"
+    environment: str = "development"
 
     # Model Specifications
     openai_embedding_model: str = "text-embedding-3-small"
@@ -48,17 +54,10 @@ class Settings(BaseSettings):
     default_search_limit: int = 5
     vector_search_batch_limit: int = 100  # Max results per vector search
     ivfflat_probes: int = 10  # IVFFlat accuracy tuning (1-100, higher = more accurate)
-    enable_llm_reranking: bool = Field(True, env="ENABLE_LLM_RERANKING")  # Enable LLM-based search reranking
+    enable_llm_reranking: bool = True
 
     # API Configuration - CORS origins from env or defaults
-    cors_origins: list = Field(
-        default=["http://localhost:3000", "http://localhost:3001", "http://localhost:3002", "http://localhost:8000"],
-        env="CORS_ORIGINS"
-    )
-
-    class Config:
-        env_file = ".env"
-        case_sensitive = False
+    cors_origins: list = ["http://localhost:3000", "http://localhost:3001", "http://localhost:3002", "http://localhost:8000"]
 
 
 # Global settings instance
