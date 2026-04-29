@@ -43,7 +43,7 @@ class Settings:
 
         self.gemini_embedding_model: str = "models/text-embedding-004"
         self.gemini_embedding_dims: int = 768
-        self.gemini_generation_model: str = "gemini-2.0-flash-exp"
+        self.gemini_generation_model: str = "gemini-2.5-flash"
 
         # Cost per 1K tokens (USD)
         self.openai_input_cost: float = 0.0025  # gpt-4o

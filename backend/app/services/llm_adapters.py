@@ -26,7 +26,7 @@ class BaseLLMAdapter(ABC):
 
     @abstractmethod
     async def generate_answer(
-        self, query: str, context: str, system_prompt: str, max_tokens: int = 500
+        self, query: str, context: str, system_prompt: str, max_tokens: int = 2000
     ) -> Tuple[str, Dict[str, Any]]:
         """
         Generate answer given query and context
@@ -80,7 +80,7 @@ class OpenAIAdapter(BaseLLMAdapter):
             raise Exception(f"OpenAI embedding error: {e}")
 
     async def generate_answer(
-        self, query: str, context: str, system_prompt: str, max_tokens: int = 500
+        self, query: str, context: str, system_prompt: str, max_tokens: int = 2000
     ) -> Tuple[str, Dict[str, Any]]:
         """Generate answer using gpt-4o"""
         import time
@@ -252,7 +252,7 @@ class GeminiAdapter(BaseLLMAdapter):
             raise Exception(f"Gemini embedding error: {e}")
 
     async def generate_answer(
-        self, query: str, context: str, system_prompt: str, max_tokens: int = 500
+        self, query: str, context: str, system_prompt: str, max_tokens: int = 2000
     ) -> Tuple[str, Dict[str, Any]]:
         """Generate answer using Gemini 2.0 Flash"""
         import time
@@ -341,8 +341,8 @@ IMPORTANT:
             # Convert bytes to PIL Image
             image = Image.open(io.BytesIO(image_data))
 
-            # Use Gemini 2.0 Flash with vision
-            model = genai.GenerativeModel(model_name="gemini-2.0-flash-exp")
+            # Use Gemini 2.5 Flash with vision
+            model = genai.GenerativeModel(model_name=self.generation_model)
 
             response = model.generate_content([extraction_prompt, image])
 
